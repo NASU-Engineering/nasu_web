@@ -43,8 +43,13 @@ export function normalizeAnnouncement(raw) {
     pinned: Boolean(raw.pinned),
     author: String(raw.author ?? 'Course team'),
     placeholder: Boolean(raw.placeholder),
+    // Optional update kind (academic | deadline | activity | general); derived when absent (services/updates.js).
+    type: raw.type || raw.update_type || null,
     // Optional deep link to Hub content (services/deep-links.js).
-    link: raw.link_type ? { type: String(raw.link_type), id: String(raw.link_id ?? ''), subjectId: raw.link_subject_id || null } : null,
+    link: raw.link_type ? {
+      type: String(raw.link_type), id: String(raw.link_id ?? ''), subjectId: raw.link_subject_id || null,
+      category: raw.link_category || null,
+    } : null,
   };
 }
 

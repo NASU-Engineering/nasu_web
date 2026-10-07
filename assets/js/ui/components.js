@@ -3,8 +3,9 @@
 import { html } from './html.js';
 import { icons } from './icons.js';
 import { subjectById, categoryById } from '../data/catalog.js';
-import { shortDate, relativeDays, pad2 } from './format.js';
-import { hubPath, LINK_LABELS } from '../services/deep-links.js';
+import { shortDate, relativeDays, pad2, dateTime } from './format.js';
+import { hubPath, ctaLabel } from '../services/deep-links.js';
+import { updateKind, UPDATE_KINDS } from '../services/updates.js';
 
 export function pageHead({ eyebrow, title, code, lead, back }) {
   return html`
@@ -51,22 +52,35 @@ export function resourceList(items, opts) {
   return html`<div class="res-list">${items.map(r => resourceCard(r, opts))}</div>`;
 }
 
-export function announcementCard(a, { compact = false } = {}) {
-  const subject = a.subjectId ? subjectById(a.subjectId) : null;
-  const linkPath = hubPath(a.link);
+/**
+ * One row of the Updates feed: kind · subject · time, title, ≤2 lines of text,
+ * and a single contextual CTA when the update deep-links to Hub content.
+ * `level` = heading level of the title (2 on the Updates page, 3 under a section).
+ */
+export function updateItem(u, { level = 2 } = {}) {
+  const subject = u.subjectId ? subjectById(u.subjectId) : null;
+  const kind = updateKind(u);
+  const path = hubPath(u.link);
+  const cta = path ? ctaLabel(u.link) : null;
   return html`
-    <article class="ann ${a.pinned ? 'pinned' : ''} ${compact ? 'compact' : ''}" data-item="${a.id}">
-      <header class="ann-head">
-        ${a.pinned ? html`<span class="ann-pin">${icons.pin}<span>Pinned</span></span>` : ''}
-        <span class="ann-tag mono">${subject ? subject.code : 'GENERAL'}</span>
-        <time class="ann-date" datetime="${a.publishedAt || ''}">${shortDate(a.publishedAt)}</time>
-        ${a.placeholder ? html`<span class="badge">Sample</span>` : ''}
-      </header>
-      <h3 class="ann-title">${a.title}</h3>
-      <p class="ann-body">${a.body}</p>
-      ${linkPath ? html`<a class="ann-link" href="#${linkPath}">${LINK_LABELS[a.link.type]}${icons.chevron}</a>` : ''}
-      ${compact ? '' : html`<p class="ann-author">— ${a.author}</p>`}
+    <article class="upd ${u.pinned ? 'is-pinned' : ''}" data-item="${u.id}">
+      <div class="upd-main">
+        <p class="upd-meta">
+          ${u.pinned ? html`<span class="upd-pin">${icons.pin}<span>Pinned</span></span>` : ''}
+          <span class="upd-kind kind-${kind}">${UPDATE_KINDS[kind].label}</span>
+          ${subject ? html`<span class="mono">${subject.code}</span>` : ''}
+          <time datetime="${u.publishedAt || ''}">${dateTime(u.publishedAt)}</time>
+          ${u.placeholder ? html`<span class="badge">Sample</span>` : ''}
+        </p>
+        <p class="upd-title" role="heading" aria-level="${level}">${u.title}</p>
+        ${u.body ? html`<p class="upd-body">${u.body}</p>` : ''}
+      </div>
+      ${cta ? html`<a class="upd-cta" href="#${path}">${cta}${icons.chevron}</a>` : ''}
     </article>`;
+}
+
+export function updateFeed(list, opts) {
+  return html`<div class="upd-feed">${list.map(u => updateItem(u, opts))}</div>`;
 }
 
 /** Scrolls to and briefly highlights the element for a deep-linked ?item=… */

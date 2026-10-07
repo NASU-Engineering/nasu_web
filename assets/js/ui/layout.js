@@ -10,7 +10,7 @@ const NAV = [
   { href: '#/dashboard', match: ['/dashboard'], label: 'Home', icon: icons.home },
   { href: '#/subjects', match: ['/subjects'], label: 'Subjects', icon: icons.book },
   { href: '#/resources', match: ['/resources', '/search'], label: 'Resources', short: 'Search', icon: icons.search },
-  { href: '#/announcements', match: ['/announcements'], label: 'News', icon: icons.bell },
+  { href: '#/announcements', match: ['/announcements'], label: 'Updates', icon: icons.bell },
   { href: '#/profile', match: ['/profile'], label: 'Profile', short: 'Me', icon: icons.user, mobileOnly: true },
 ];
 

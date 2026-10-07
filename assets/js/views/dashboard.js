@@ -1,7 +1,7 @@
 import { html } from '../ui/html.js';
 import { icons } from '../ui/icons.js';
 import { api } from '../services/api.js';
-import { sectionLabel, resourceList, announcementCard, subjectCard, emptyState } from '../ui/components.js';
+import { sectionLabel, resourceList, updateFeed, subjectCard, emptyState } from '../ui/components.js';
 import { workspacesFor } from '../services/roles.js';
 
 const settle = p => p.then(value => ({ value }), error => ({ error }));
@@ -43,11 +43,11 @@ export default async function dashboard({ access }) {
 
       <div class="dash-cols">
         <section>
-          ${sectionLabel('Latest announcements', html`<a class="see-all" href="#/announcements">See all</a>`)}
+          ${sectionLabel('Latest updates', html`<a class="see-all" href="#/announcements">All updates</a>`)}
           ${announcements.error ? panelError(announcements.error)
             : announcements.value.length
-              ? html`<div class="ann-list">${announcements.value.map(a => announcementCard(a, { compact: true }))}</div>`
-              : emptyState('No announcements yet')}
+              ? updateFeed(announcements.value, { level: 3 })
+              : emptyState('No updates yet')}
         </section>
         <section>
           ${sectionLabel('Recently added', html`<a class="see-all" href="#/resources">Browse</a>`)}

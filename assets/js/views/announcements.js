@@ -1,39 +1,61 @@
+// Updates (route kept at /announcements). A compact chronological feed; the
+// Hub is the source of truth and WhatsApp will only link back here.
+
 import { html, mount } from '../ui/html.js';
 import { api } from '../services/api.js';
 import { SUBJECTS } from '../data/catalog.js';
-import { pageHead, announcementCard, chips, emptyState, focusLinkedItem } from '../ui/components.js';
+import { UPDATE_FILTERS, sortUpdates, filterUpdates } from '../services/updates.js';
+import { pageHead, updateFeed, chips, emptyState, focusLinkedItem } from '../ui/components.js';
 
 export default async function announcements({ query }) {
-  const all = await api.announcements.list();
-  const chipItems = [
-    { value: '', label: 'All' },
-    { value: 'general', label: 'General' },
-    ...SUBJECTS.map(s => ({ value: s.id, label: s.code })),
-  ];
+  const all = sortUpdates(await api.announcements.list());
+  const state = {
+    kind: UPDATE_FILTERS.some(f => f.value === query.kind) ? query.kind : '',
+    subjectId: SUBJECTS.some(s => s.id === query.subject) ? query.subject : '',
+  };
 
-  const list = filter => {
-    const items = all.filter(a => !filter || (filter === 'general' ? !a.subjectId : a.subjectId === filter));
+  const body = () => {
+    const items = filterUpdates(all, state);
     return items.length
-      ? html`<div class="ann-list">${items.map(a => announcementCard(a))}</div>`
-      : emptyState('No announcements here', 'Check back later or pick another filter.');
+      ? updateFeed(items)
+      : emptyState('No updates here', state.kind || state.subjectId ? 'Try another filter.' : 'New updates will appear here.');
   };
 
   return {
-    title: 'Announcements',
+    title: 'Updates',
     html: html`
-      ${pageHead({ eyebrow: 'NEWS', title: 'Announcements', lead: 'Updates from the prep-year office and your course teams.' })}
-      <div class="sticky-filters">${chips(chipItems, '', { name: 'Filter announcements' })}</div>
-      <div id="annBody">${list('')}</div>`,
+      ${pageHead({ title: 'Updates' })}
+      <div class="sticky-filters upd-filters">
+        ${chips(UPDATE_FILTERS, state.kind, { name: 'Filter updates by type' })}
+        <label class="select-wrap upd-subject">
+          <span class="visually-hidden">Subject</span>
+          <select id="updSubject">
+            <option value="">All subjects</option>
+            ${SUBJECTS.map(s => html`<option value="${s.id}" ${s.id === state.subjectId ? 'selected' : ''}>${s.code} — ${s.name}</option>`)}
+          </select>
+        </label>
+      </div>
+      <div id="updBody">${body()}</div>`,
     bind(root) {
-      const bodyEl = root.querySelector('#annBody');
+      const bodyEl = root.querySelector('#updBody');
       focusLinkedItem(root, query.item); // deep link: #/announcements?item=<id>
+
+      const apply = () => {
+        const p = new URLSearchParams();
+        if (state.kind) p.set('kind', state.kind);
+        if (state.subjectId) p.set('subject', state.subjectId);
+        history.replaceState(null, '', `#/announcements${p.toString() ? `?${p}` : ''}`);
+        mount(bodyEl, body());
+      };
       root.querySelectorAll('.chip').forEach(btn => btn.addEventListener('click', () => {
+        state.kind = btn.dataset.value;
         root.querySelectorAll('.chip').forEach(b => {
           b.classList.toggle('on', b === btn);
           b.setAttribute('aria-pressed', String(b === btn));
         });
-        mount(bodyEl, list(btn.dataset.value));
+        apply();
       }));
+      root.querySelector('#updSubject').addEventListener('change', e => { state.subjectId = e.target.value; apply(); });
     },
   };
 }

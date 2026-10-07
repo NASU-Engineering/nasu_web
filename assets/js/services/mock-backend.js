@@ -141,9 +141,12 @@ export async function searchResources({ query, subjectId, category }) {
 function sampleAnnouncements() {
   return [
     { id: 'a1', pinned: true, title: 'Welcome to the Freshmen Hub', body: 'This is a placeholder announcement. Real announcements from the faculty will appear here once the hub is connected.', publishedAt: daysAgo(1), author: 'Prep-Year Office' },
-    { id: 'a2', subjectId: 'math1', title: 'Tutorial room change (sample)', body: 'Sample text: this week’s tutorial moves to another hall. Check your group schedule.', publishedAt: daysAgo(2), author: 'Mathematics I team', link_type: 'resource', link_id: 'math1-t1', link_subject_id: 'math1' },
-    { id: 'a3', subjectId: 'draw', title: 'Bring your drawing tools (sample)', body: 'Sample text: the next board session needs set squares, compass and A3 sheets.', publishedAt: daysAgo(4), author: 'Drawing team', link_type: 'subject', link_id: 'draw' },
+    { id: 'a2', subjectId: 'math1', title: 'Tutorial room change (sample)', body: 'Sample text: this week’s tutorial moves to another hall. Check your group schedule.', publishedAt: daysAgo(2), author: 'Mathematics I team', link_type: 'resource', link_id: 'math1-t1', link_subject_id: 'math1', link_category: 'tutorial' },
+    { id: 'a3', subjectId: 'draw', title: 'Bring your drawing tools (sample)', body: 'Sample text: the next board session needs set squares, compass and A3 sheets.', publishedAt: daysAgo(4), author: 'Drawing team', link_type: 'resource', link_id: 'draw-b1', link_subject_id: 'draw', link_category: 'board' },
     { id: 'a4', subjectId: 'chem', title: 'Lab safety briefing (sample)', body: 'Sample text: attendance at the safety briefing is required before the first lab.', publishedAt: daysAgo(7), author: 'Chemistry team' },
+    { id: 'a5', subjectId: 'chem', title: 'Assignment 1 due this week (sample)', body: 'Sample text: submit before the deadline shown on the assignment.', publishedAt: daysAgo(0.1), author: 'Chemistry team', link_type: 'assignment', link_id: 'chem-a1', link_subject_id: 'chem' },
+    { id: 'a6', title: 'Engineering workshop sign-ups (sample)', body: 'Sample text: a hands-on workshop for prep-year students. Places are limited.', publishedAt: daysAgo(3), author: 'Student activities', link_type: 'activity', link_id: 'workshop-1' },
+    { id: 'a7', subjectId: 'stat', title: 'Week 2 practice quiz (sample)', body: 'Sample text: a short practice quiz on free-body diagrams.', publishedAt: daysAgo(5), author: 'Statics team', link_type: 'quiz', link_id: 'quiz-1' },
   ].map(a => normalizeAnnouncement({ ...a, placeholder: true }));
 }
 

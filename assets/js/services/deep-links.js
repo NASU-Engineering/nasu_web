@@ -42,6 +42,18 @@ export function hubUrl(target, base) {
 }
 
 export const LINK_LABELS = {
-  subject: 'Open subject', resource: 'Open resource', assignment: 'Open assignment',
-  announcement: 'Open announcement', quiz: 'Open quiz', activity: 'Open activity',
+  subject: 'Open subject', resource: 'Open resource', assignment: 'View assignment',
+  announcement: 'Open update', quiz: 'Take quiz', activity: 'View activity',
 };
+
+// Resource links may say what they point at (link_category), e.g. "Open board".
+const CATEGORY_CTA = {
+  lecture: 'Open lecture', tutorial: 'Open tutorial', board: 'Open board', pdf: 'Open PDF', assignment: 'View assignment',
+};
+
+/** The one contextual call-to-action for a link target, or null when there's no valid link. */
+export function ctaLabel(target) {
+  if (!hubPath(target)) return null;
+  if (target.type === 'resource' && CATEGORY_CTA[target.category]) return CATEGORY_CTA[target.category];
+  return LINK_LABELS[target.type];
+}

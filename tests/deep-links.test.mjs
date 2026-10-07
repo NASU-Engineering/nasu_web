@@ -31,5 +31,5 @@ test('hubUrl builds a shareable absolute link', () => {
 test('announcements carry an optional link', () => {
   assert.equal(normalizeAnnouncement({ id: 1, title: 't' }).link, null);
   assert.deepEqual(normalizeAnnouncement({ id: 1, link_type: 'resource', link_id: 7, link_subject_id: 'math1' }).link,
-    { type: 'resource', id: '7', subjectId: 'math1' });
+    { type: 'resource', id: '7', subjectId: 'math1', category: null });
 });

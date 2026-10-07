@@ -18,3 +18,15 @@ export function relativeDays(iso) {
 }
 
 export const pad2 = n => String(n).padStart(2, '0');
+
+const timeFmt = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+/** "Today, 14:30" · "Yesterday, 09:10" · "8 Oct, 14:30" */
+export function dateTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  const days = Math.round((new Date(iso).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 864e5);
+  const day = days === 0 ? 'Today' : days === -1 ? 'Yesterday' : shortDate(iso);
+  return `${day}, ${timeFmt.format(d)}`;
+}
