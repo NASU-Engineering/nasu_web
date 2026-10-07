@@ -54,6 +54,9 @@ test('audit entries, members, stats, groups, pages', () => {
   assert.equal(s.quizzes, null);
   assert.equal(s.pending_reviews, null);
   assert.equal(s.activities, null, 'missing metrics are null, never invented');
+  const live = normalizeStats({ total_students: 10, editors: 4, content_managers: 2, pending_reviews: 3, published_resources: 7, quizzes: null, activities: null });
+  assert.equal(live.section_editors, 4, 'backend `editors` is the section-editor count');
+  assert.equal('editors' in live, false, 'views never see the raw backend key');
 
   assert.deepEqual(normalizeGroups([{ group_name: 'G1', sections: ['S1', 2] }, { sections: [] }]), [{ name: 'G1', sections: ['S1', '2'] }]);
 

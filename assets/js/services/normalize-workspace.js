@@ -110,8 +110,11 @@ export function normalizeMember(raw) {
 // Unknown / not-yet-built metrics stay null and render as "—".
 export const STAT_KEYS = ['total_students', 'section_editors', 'content_managers', 'pending_reviews', 'published_resources', 'quizzes', 'activities'];
 
+// Backend key → frontend key where they differ (get_admin_stats returns `editors`).
+const STAT_ALIASES = { section_editors: 'editors' };
+
 export function normalizeStats(raw) {
-  return Object.fromEntries(STAT_KEYS.map(k => [k, numOrNull(raw?.[k])]));
+  return Object.fromEntries(STAT_KEYS.map(k => [k, numOrNull(raw?.[STAT_ALIASES[k]] ?? raw?.[k])]));
 }
 
 /**
