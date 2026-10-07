@@ -235,6 +235,14 @@ document.addEventListener('submit', e => {
   navigate('/search' + (q ? '?q=' + encodeURIComponent(q) : ''));
 });
 
+// Top-bar Back / Forward: plain browser history.
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-action="history-back"], [data-action="history-forward"]');
+  if (!btn || btn.disabled) return;
+  if (btn.dataset.action === 'history-back') history.back();
+  else history.forward();
+});
+
 let signingOut = false;
 document.addEventListener('click', async e => {
   if (!e.target.closest('[data-action="sign-out"]') || signingOut) return;

@@ -10,7 +10,6 @@ const NAV = [
   { href: '#/dashboard', match: ['/dashboard'], label: 'Home', icon: icons.home },
   { href: '#/subjects', match: ['/subjects'], label: 'Subjects', icon: icons.book },
   { href: '#/resources', match: ['/resources', '/search'], label: 'Resources', short: 'Search', icon: icons.search },
-  { href: '#/assignments', match: ['/assignments'], label: 'Assignments', icon: icons.assignment, desktopOnly: true },
   { href: '#/announcements', match: ['/announcements'], label: 'News', icon: icons.bell },
   { href: '#/profile', match: ['/profile'], label: 'Profile', short: 'Me', icon: icons.user, mobileOnly: true },
 ];
@@ -50,7 +49,15 @@ export function renderLayout({ session, path, access = null }) {
   if (session) {
     // Shown only when the backend reports a staff role. UX only.
     const ws = primaryWorkspace(access?.roles || []);
+    // Browser history. The Navigation API (where supported) says whether each direction exists.
+    const nav = globalThis.navigation;
+    const canBack = nav?.canGoBack ?? true;
+    const canForward = nav?.canGoForward ?? true;
     mount(topbar, html`
+      <div class="history-nav hide-sm" role="group" aria-label="History">
+        <button type="button" class="icon-btn icon-btn-hist" data-action="history-back" aria-label="Back" title="Back" ${canBack ? '' : 'disabled'}>${icons.back}</button>
+        <button type="button" class="icon-btn icon-btn-hist" data-action="history-forward" aria-label="Forward" title="Forward" ${canForward ? '' : 'disabled'}>${icons.chevron}</button>
+      </div>
       ${brand}
       <nav class="topnav" aria-label="Main">
         ${NAV.filter(n => !n.mobileOnly).map(n => navLink(n, path))}
