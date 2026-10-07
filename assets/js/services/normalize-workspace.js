@@ -2,22 +2,26 @@
 // Both backends return raw snake_case rows; api.js runs them through here, so
 // a column rename on the backend is a one-line change in this file.
 //
-// Field names follow the PROPOSED contract in docs/ROLE_DASHBOARDS.md and must
-// be confirmed by the backend owner.
+// Backend naming (Phase 1): raw content rows use subject_code / week_no /
+// mime_type; some RPCs also expose aliases subject_id / week. Both are accepted
+// here so views never depend on raw DB names. Subjects arrive as course codes
+// ('BSC131') and are translated to frontend ids ('stat') via catalog.js.
 
 import { normalizeRoles } from './roles.js';
 import { STATUSES } from './content-workflow.js';
-import { categoryById } from '../data/catalog.js';
+import { categoryById, subjectIdFrom } from '../data/catalog.js';
+import { safeUrl } from './normalize.js';
 
 const str = v => (v == null ? '' : String(v));
 const strOrNull = v => (v == null || v === '' ? null : String(v));
 const numOrNull = v => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
 
 export function normalizeScope(raw) {
-  if (!raw || typeof raw !== 'object' || !raw.subject_id) return null;
+  const subject = raw?.subject_id ?? raw?.subject_code;
+  if (!raw || typeof raw !== 'object' || !subject) return null;
   return {
     id: strOrNull(raw.id),
-    subjectId: String(raw.subject_id),
+    subjectId: subjectIdFrom(subject),
     group: strOrNull(raw.group_name),
     section: strOrNull(raw.section),
   };
@@ -50,18 +54,19 @@ export function normalizeContentItem(raw) {
     id: str(raw.id),
     title: str(raw.title) || 'Untitled',
     description: str(raw.description),
-    subjectId: str(raw.subject_id),
+    subjectId: subjectIdFrom(raw.subject_id ?? raw.subject_code),
     contentType: categoryById(raw.content_type) ? raw.content_type : 'pdf',
-    week: numOrNull(raw.week),
+    week: numOrNull(raw.week ?? raw.week_no),
     group: strOrNull(raw.group_name),
     section: strOrNull(raw.section),
     status: STATUSES[status] ? status : 'draft',
     file: hasFile ? {
       name: str(raw.file_name) || str(raw.storage_path).split('/').pop(),
       size: numOrNull(raw.file_size),
-      mimeType: str(raw.file_mime_type),
+      mimeType: str(raw.mime_type ?? raw.file_mime_type),
       storagePath: strOrNull(raw.storage_path),
     } : null,
+    externalUrl: safeUrl(raw.external_url),
     submitter: person(raw.submitter),
     reviewer: person(raw.reviewer),
     reviewNote: str(raw.review_note),

@@ -22,6 +22,17 @@ export function subjectById(id) {
   return SUBJECTS.find(s => s.id === id) || null;
 }
 
+export function subjectByCode(code) {
+  return SUBJECTS.find(s => s.code === code) || null;
+}
+
+// The backend identifies subjects by course code (e.g. 'BSC131'); the frontend
+// uses short ids ('stat'). These two helpers are the only translation point.
+/** Frontend subject id → backend subject code (unknown values pass through). */
+export const subjectCodeFor = id => subjectById(id)?.code ?? id;
+/** Backend subject code (or a frontend id) → frontend subject id. */
+export const subjectIdFrom = v => subjectByCode(v)?.id ?? (subjectById(v) ? v : (v == null ? '' : String(v)));
+
 export function categoryById(id) {
   return CATEGORIES.find(c => c.id === id) || null;
 }

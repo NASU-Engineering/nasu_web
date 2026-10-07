@@ -48,6 +48,7 @@ export default async function reviewItem({ access, path, params, reload }) {
             ${panel('File', html`
               <p class="file-line">${icons.file}<span>${fileLabel(item.file)}</span></p>
               <button type="button" class="btn btn-ghost" id="openFile" ${item.file ? '' : 'disabled'}>${icons.eye}<span>Preview / open file</span></button>
+              ${item.externalUrl ? html`<a class="btn btn-ghost" href="${item.externalUrl}" target="_blank" rel="noopener noreferrer">${icons.link}<span>Open external link</span></a>` : ''}
               <p class="help" id="fileMsg" role="status"></p>`)}
             ${decisionPanel}
           </div>

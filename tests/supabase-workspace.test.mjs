@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
   createWorkspaceAdapter, toWorkspaceError, BUCKET, SIGNED_URL_SECONDS, SAVE_DRAFT_CONTRACT_CONFIRMED, RPC,
 } from '../assets/js/services/supabase-workspace.js';
-import { normalizeContentItem } from '../assets/js/services/normalize-workspace.js';
+import { normalizeContentItem, normalizeScope } from '../assets/js/services/normalize-workspace.js';
 import { storageObjectPath, safeFileName } from '../assets/js/services/content-workflow.js';
 
 /** Fake supabase-js client: records every call, answers from `responses`. */
@@ -62,12 +62,23 @@ test('editor: list_my_content(), get_content_item(p_id), submit_content_for_revi
   await assert.rejects(empty().getContentItem('x'), e => e.code === 'not_found');
 });
 
-test('save_content_draft stays blocked until its parameter list is confirmed', async () => {
-  assert.equal(SAVE_DRAFT_CONTRACT_CONFIRMED, false);
-  const { calls, adapter } = fakeClient();
-  await assert.rejects(adapter().saveContentDraft({ values: { subjectId: 'math1', title: 'x' }, file: { name: 'a.pdf', size: 1 } }),
-    e => e.code === 'backend_required');
-  assert.equal(calls.length, 0, 'nothing is sent and nothing is uploaded');
+test('save_content_draft uses exactly the verified parameter names (subject as course code)', async () => {
+  assert.equal(SAVE_DRAFT_CONTRACT_CONFIRMED, true);
+  const { calls, adapter } = fakeClient({ save_content_draft: { id: 41 } });
+  await adapter().saveContentDraft({ values: { subjectId: 'stat', contentType: 'tutorial', week: '3', group: 'G2', section: null, title: 'T', description: '' } });
+  assert.deepEqual(Object.keys(calls[0].args).sort(), [
+    'p_content_type', 'p_description', 'p_external_url', 'p_file_name', 'p_file_size', 'p_group_name',
+    'p_id', 'p_mime_type', 'p_section', 'p_storage_path', 'p_subject_id', 'p_title', 'p_week',
+  ]);
+  assert.deepEqual(calls[0].args, {
+    p_id: null, p_subject_id: 'BSC131', p_content_type: 'tutorial', p_title: 'T', p_description: null,
+    p_week: 3, p_group_name: 'G2', p_section: null, p_storage_path: null, p_external_url: null,
+    p_file_name: null, p_file_size: null, p_mime_type: null,
+  });
+  // the gate can still close it (kept for future contract changes)
+  const { calls: none, adapter: gated } = fakeClient();
+  await assert.rejects(gated({ saveDraftConfirmed: false }).saveContentDraft({ values: { subjectId: 'stat' } }), e => e.code === 'backend_required');
+  assert.equal(none.length, 0);
 });
 
 const values = { subjectId: 'stat', contentType: 'pdf', week: '2', group: 'G1', section: 'S2', title: 'Sheet 2', description: '' };
@@ -83,12 +94,15 @@ test('upload architecture: save draft → upload to <subject>/<item>/<unique-nam
   assert.equal(first.args.p_storage_path, null, 'first save has no file yet');
   assert.equal(upload.kind, 'upload');
   assert.equal(upload.bucket, BUCKET);
-  assert.match(upload.path, /^stat\/item-9\/[a-z0-9]+-[A-Za-z0-9_-]+-sheet-2-final\.pdf$/);
+  assert.match(upload.path, /^BSC131\/item-9\/[a-z0-9]+-[A-Za-z0-9_-]+-sheet-2-final\.pdf$/);
   assert.equal(upload.opts.upsert, false);
   assert.equal(upload.file, pdf);
   assert.equal(second.name, 'save_content_draft');
   assert.equal(second.args.p_id, 'item-9');
   assert.equal(second.args.p_storage_path, upload.path);
+  assert.equal(second.args.p_file_name, pdf.name);
+  assert.equal(second.args.p_file_size, pdf.size);
+  assert.equal(second.args.p_mime_type, 'application/pdf');
   assert.equal(row.storage_path, upload.path);
   assert.equal(calls.length, 3);
 });
@@ -98,6 +112,28 @@ test('upload failure reports the created draft id and skips the second save', as
   await assert.rejects(adapter({ saveDraftConfirmed: true }).saveContentDraft({ values, file: pdf }),
     e => e.code === 'conflict' && e.contentItemId === 'item-1');
   assert.deepEqual(calls.map(c => c.kind), ['rpc', 'upload']);
+});
+
+test('role and scope RPCs return void: the adapter resolves to null (views reload)', async () => {
+  const { adapter } = fakeClient({ admin_grant_role: null, admin_revoke_role: null, admin_set_editor_scopes: null });
+  const a = adapter();
+  assert.equal(await a.grantRole('u1', 'section_editor'), null);
+  assert.equal(await a.revokeRole('u1', 'section_editor'), null);
+  assert.equal(await a.setEditorScopes('u1', []), null);
+});
+
+test('raw DB names and RPC aliases normalise to the same item; codes map to frontend ids', () => {
+  const raw = normalizeContentItem({ id: 7, subject_code: 'BSC131', week_no: 4, status: 'pending', storage_path: 'BSC131/7/x-a.pdf', file_name: 'a.pdf', file_size: 9, mime_type: 'application/pdf', external_url: 'https://example.com/v' });
+  const alias = normalizeContentItem({ id: 7, subject_id: 'BSC131', week: 4, status: 'pending', storage_path: 'BSC131/7/x-a.pdf', file_name: 'a.pdf', file_size: 9, mime_type: 'application/pdf', external_url: 'https://example.com/v' });
+  assert.deepEqual(raw, alias);
+  assert.equal(raw.subjectId, 'stat');
+  assert.equal(raw.week, 4);
+  assert.equal(raw.status, 'pending_review');
+  assert.deepEqual(raw.file, { name: 'a.pdf', size: 9, mimeType: 'application/pdf', storagePath: 'BSC131/7/x-a.pdf' });
+  assert.equal(raw.externalUrl, 'https://example.com/v');
+  assert.equal(normalizeContentItem({ id: 1, external_url: 'javascript:alert(1)' }).externalUrl, null);
+  assert.equal(normalizeScope({ subject_id: 'BSC131', group_name: 'G2', section: 'S6' }).subjectId, 'stat');
+  assert.equal(normalizeScope({ subject_id: 'math1' }).subjectId, 'math1', 'mock ids still accepted');
 });
 
 test('updating an existing draft without a new file makes one save call', async () => {
@@ -119,11 +155,14 @@ test('review queue: pending maps to backend "pending"; processed merges approved
   const a = adapter();
   const pending = await a.listReviewQueue({ status: 'pending_review', cursor: 'c1', limit: 10 });
   assert.deepEqual(rpcCalls(calls)[0].args, { p_status: 'pending', p_cursor: 'c1', p_limit: 10 });
+  await a.listReviewQueue();
+  assert.deepEqual(rpcCalls(calls)[1].args, { p_status: 'pending', p_cursor: null, p_limit: 25 }, 'backend default limit');
+  calls.splice(0);
   assert.equal(pending.next_cursor, 'c2');
   assert.equal(normalizeContentItem(pending.items[0]).status, 'pending_review');
 
   const processed = await a.listReviewQueue({ status: 'processed' });
-  assert.deepEqual(rpcCalls(calls).slice(1).map(c => c.args.p_status), ['approved', 'rejected', 'published']);
+  assert.deepEqual(rpcCalls(calls).map(c => c.args.p_status), ['approved', 'rejected', 'published']);
   assert.deepEqual(processed.items.map(i => i.id), ['r1', 'a1', 'u1'], 'newest decision first');
   assert.equal(processed.next_cursor, null);
 });
@@ -135,7 +174,7 @@ test('decisions: review_content(p_id, p_decision, p_note) and publish_content(p_
   await a.decideContent('c1', { decision: 'reject', note: 'Fix page 2' });
   await a.publishContent('c1');
   assert.deepEqual(rpcCalls(calls).map(c => [c.name, c.args]), [
-    ['review_content', { p_id: 'c1', p_decision: 'approve', p_note: '' }],
+    ['review_content', { p_id: 'c1', p_decision: 'approve', p_note: null }],
     ['review_content', { p_id: 'c1', p_decision: 'reject', p_note: 'Fix page 2' }],
     ['publish_content', { p_id: 'c1' }],
   ]);
@@ -171,12 +210,12 @@ test('admin RPC arguments match the contract exactly', async () => {
     ['get_admin_stats', undefined],
     ['admin_list_content', { p_status: 'pending', p_cursor: 'k', p_limit: 50 }],
     ['admin_list_content', { p_status: null, p_cursor: null, p_limit: 50 }],
-    ['admin_search_members', { p_query: '2025', p_limit: 50 }],
+    ['admin_search_members', { p_query: '2025', p_limit: 25 }],
     ['admin_grant_role', { p_user_id: 'u1', p_role: 'section_editor' }],
     ['admin_revoke_role', { p_user_id: 'u1', p_role: 'content_manager' }],
     ['admin_set_editor_scopes', { p_user_id: 'u1', p_scopes: [
-      { subject_id: 'math1', group_name: 'G1', section: null },
-      { subject_id: 'chem', group_name: null, section: null },
+      { subject_id: 'BSC111', group_name: 'G1', section: null },
+      { subject_id: 'BSC141', group_name: null, section: null },
     ] }],
     ['admin_list_audit_log', { p_cursor: 'z', p_limit: 50 }],
   ]);

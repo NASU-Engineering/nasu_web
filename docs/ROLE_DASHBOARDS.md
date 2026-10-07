@@ -1,9 +1,7 @@
 # Role-based dashboards — frontend ↔ backend contract
 
-Status: **wired to the Backend Phase 1 RPCs** (see *Phase 1 wiring* below),
-except `save_content_draft`, whose parameter list is not yet confirmed — draft
-creation/upload fails closed (`backend_required`) until it is. If roles can't be
-loaded, nobody sees a staff workspace and the student hub works as before.
+Status: **all 16 workspace RPCs (+ get_my_profile) wired to Backend Phase 1** (see below).
+If roles can't be loaded, nobody sees a staff workspace and the student hub works as before.
 
 ## Phase 1 wiring (implemented)
 
@@ -13,7 +11,7 @@ loaded, nobody sees a staff workspace and the student hub works as before.
 | `listGroups` | `list_groups()` | stated |
 | `listMyContent` | `list_my_content()` — status filter applied in the UI | stated |
 | `getContentItem` | `get_content_item({ p_id })` | stated + live hint |
-| `saveContentDraft` | **blocked** — `save_content_draft(...)` params unconfirmed (`SAVE_DRAFT_CONTRACT_CONFIRMED = false`) | — |
+| `saveContentDraft` | `save_content_draft({ p_id, p_subject_id, p_content_type, p_title, p_description, p_week, p_group_name, p_section, p_storage_path, p_external_url, p_file_name, p_file_size, p_mime_type })` → jsonb with `id` | verified by backend owner |
 | `submitContentForReview` | `submit_content_for_review({ p_id })` | stated + live hint |
 | `listReviewQueue` | `list_review_queue({ p_status, p_cursor, p_limit })`; UI `pending_review` → `pending`; "Processed" = 3 calls (`approved`, `rejected`, `published`) merged | stated |
 | `decideContent` | `review_content({ p_id, p_decision, p_note })`, decision `approve`/`reject` | stated + live hint |
@@ -26,7 +24,7 @@ loaded, nobody sees a staff workspace and the student hub works as before.
 | `setEditorScopes` | `admin_set_editor_scopes({ p_user_id, p_scopes: [{ subject_id, group_name, section }] })` | stated + live hint (element shape assumed) |
 | `listAuditLog` | `admin_list_audit_log({ p_cursor, p_limit })`; action filter in the UI | stated |
 
-Upload flow (once `save_content_draft` is confirmed): `save_content_draft` →
+Upload flow: `save_content_draft` →
 `storage.from('content-files').upload('<subject_id>/<content_item_id>/<ts>-<random>-<safe-name>', file, { upsert: false })`
 → `save_content_draft` again with the storage path + file metadata → `submit_content_for_review`.
 A replacement file always gets a new object path. If the upload fails after the
@@ -172,3 +170,17 @@ page until item routes exist.
 real files, role + scope checks imitated so forbidden/conflict paths can be
 seen. **Mock success is not backend success.** `/profile` shows a demo role
 switcher only in mock mode (`api.dev` is `null` otherwise).
+
+## Phase 1 naming notes (verified)
+
+- **Subjects are course codes on the backend** (`BSC131`); the frontend uses
+  short ids (`stat`). `catalog.js#subjectCodeFor` / `subjectIdFrom` are the only
+  translation point: outgoing `p_subject_id`, scope `subject_id` and the Storage
+  path prefix use the code; incoming `subject_id` / `subject_code` map back.
+- Raw rows use `subject_code`, `week_no`, `mime_type`; some RPCs add aliases
+  `subject_id`, `week`. Both are accepted in `normalize-workspace.js`.
+- `admin_grant_role`, `admin_revoke_role`, `admin_set_editor_scopes` return void;
+  the UI reloads the list afterwards.
+- List RPCs return `{ items, next_cursor }`; cursors are opaque. Default limits
+  sent explicitly: review 25, admin content 50, members 25, audit 50.
+- `admin_search_members('')` lists members by full name (no cursor).
