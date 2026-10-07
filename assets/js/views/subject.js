@@ -1,7 +1,7 @@
 import { html, mount } from '../ui/html.js';
 import { api } from '../services/api.js';
 import { SUBJECTS, CATEGORIES } from '../data/catalog.js';
-import { pageHead, sectionLabel, resourceList, chips, emptyState } from '../ui/components.js';
+import { pageHead, sectionLabel, resourceList, chips, emptyState, focusLinkedItem } from '../ui/components.js';
 import { pad2 } from '../ui/format.js';
 
 export default async function subject({ params, query }) {
@@ -43,6 +43,7 @@ export default async function subject({ params, query }) {
     bind(root) {
       // Keep the active subject tab visible on narrow screens.
       root.querySelector('.subj-tabs .active')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+      focusLinkedItem(root, query.item); // deep link: #/subjects/:id?item=<resource id>
       const bodyEl = root.querySelector('#subjectBody');
       root.querySelectorAll('.chip').forEach(btn => btn.addEventListener('click', () => {
         const value = btn.dataset.value;

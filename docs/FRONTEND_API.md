@@ -85,7 +85,8 @@ Guards run only **after** the session is known. If it can't be determined
 | `/`, 404 | public (landing has the Microsoft button) |
 | `/login` | guests only (signed-in → `/dashboard`) |
 | `/activate`, `/activate/verify`, `/create-password` | retired → `/login` |
-| `/dashboard`, `/subjects…`, `/search`, `/announcements` | signed in |
+| `/dashboard`, `/subjects…`, `/search`, `/resources`, `/assignments`, `/announcements`, `/profile`, `/quizzes`, `/activities`, `/leaderboard` | signed in |
+| `/editor…`, `/review…`, `/admin…` | signed in + role (UX only — see ROLE_DASHBOARDS.md) |
 
 Errors returned from the redirect are mapped (details logged in dev only):
 
@@ -148,8 +149,10 @@ Proposed read-only tables for authenticated students:
 `category` ∈ `lecture | tutorial | board | pdf | assignment`; subject ids
 `math1, vib, stat, chem, soc, draw`. `services/normalize.js` maps these rows.
 
-Admin tools are intentionally absent until role-based authorization exists on
-the backend. The old client-side admin password has been removed.
+The old client-side admin password has been removed. Staff workspaces (editor,
+review, admin) are role-based and documented in
+[ROLE_DASHBOARDS.md](ROLE_DASHBOARDS.md); they stay hidden until the backend
+provides roles.
 
 ## Tests
 
@@ -162,4 +165,10 @@ node --test tests/*.test.mjs
 - `tests/static-security.test.mjs` — no secret/service keys or JWTs, only a
   publishable key, no private table names or `.from()` queries, no admin
   password, no password/OTP/activation-code auth or inputs, exactly one
-  `signInWithOAuth` with provider `azure`, `rpc('get_my_profile')` only.
+  `signInWithOAuth` with provider `azure`, `rpc('get_my_profile')` only; shipped
+  config uses the real backend; no identity-based authorization; every staff
+  route is role-guarded; the workspace adapter isn't wired to guessed APIs.
+- `tests/roles.test.mjs` — role normalisation, workspaces, route guards, scopes.
+- `tests/content-workflow.test.mjs` — workflow actions, upload/decision validation.
+- `tests/workspace-api.test.mjs` — row normalisers; access fails closed.
+- `tests/deep-links.test.mjs` — announcement → Hub content links.

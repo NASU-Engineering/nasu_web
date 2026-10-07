@@ -15,6 +15,11 @@ export const MESSAGES = {
   network: 'Could not reach the server. Check your connection and try again.',
   not_configured: 'The hub is not connected to its server yet.',
   backend_required: 'This isn’t available yet. Please try again later.',
+  forbidden: 'You don’t have permission to do that. If you think this is a mistake, contact a hub admin.',
+  conflict: 'This item was changed by someone else. Reload it and try again.',
+  invalid: 'Some details are missing or not accepted. Check the form and try again.',
+  upload_failed: 'The file couldn’t be uploaded. Check your connection and try again.',
+  preview_unavailable: 'A preview isn’t available for this file yet.',
   unknown: 'Something went wrong. Please try again.',
 };
 

@@ -4,6 +4,7 @@ import { html } from './html.js';
 import { icons } from './icons.js';
 import { subjectById, categoryById } from '../data/catalog.js';
 import { shortDate, relativeDays, pad2 } from './format.js';
+import { hubPath, LINK_LABELS } from '../services/deep-links.js';
 
 export function pageHead({ eyebrow, title, code, lead, back }) {
   return html`
@@ -42,8 +43,8 @@ export function resourceCard(r, { showSubject = false } = {}) {
     </span>`;
 
   return r.url
-    ? html`<a class="res" href="${r.url}" target="_blank" rel="noopener noreferrer">${inner}<span class="res-go" aria-label="Opens in a new tab">${icons.arrow}</span></a>`
-    : html`<div class="res res-disabled" title="No file attached yet">${inner}</div>`;
+    ? html`<a class="res" data-item="${r.id}" href="${r.url}" target="_blank" rel="noopener noreferrer">${inner}<span class="res-go" aria-label="Opens in a new tab">${icons.arrow}</span></a>`
+    : html`<div class="res res-disabled" data-item="${r.id}" title="No file attached yet">${inner}</div>`;
 }
 
 export function resourceList(items, opts) {
@@ -52,8 +53,9 @@ export function resourceList(items, opts) {
 
 export function announcementCard(a, { compact = false } = {}) {
   const subject = a.subjectId ? subjectById(a.subjectId) : null;
+  const linkPath = hubPath(a.link);
   return html`
-    <article class="ann ${a.pinned ? 'pinned' : ''} ${compact ? 'compact' : ''}">
+    <article class="ann ${a.pinned ? 'pinned' : ''} ${compact ? 'compact' : ''}" data-item="${a.id}">
       <header class="ann-head">
         ${a.pinned ? html`<span class="ann-pin">${icons.pin}<span>Pinned</span></span>` : ''}
         <span class="ann-tag mono">${subject ? subject.code : 'GENERAL'}</span>
@@ -62,8 +64,18 @@ export function announcementCard(a, { compact = false } = {}) {
       </header>
       <h3 class="ann-title">${a.title}</h3>
       <p class="ann-body">${a.body}</p>
+      ${linkPath ? html`<a class="ann-link" href="#${linkPath}">${LINK_LABELS[a.link.type]}${icons.chevron}</a>` : ''}
       ${compact ? '' : html`<p class="ann-author">— ${a.author}</p>`}
     </article>`;
+}
+
+/** Scrolls to and briefly highlights the element for a deep-linked ?item=… */
+export function focusLinkedItem(root, id) {
+  if (!id) return;
+  const el = [...root.querySelectorAll('[data-item]')].find(x => x.dataset.item === id);
+  if (!el) return;
+  el.classList.add('is-linked');
+  el.scrollIntoView({ block: 'center' });
 }
 
 export function subjectCard(s, index) {

@@ -56,3 +56,25 @@ test('profile is only fetched via get_my_profile with no arguments', () => {
   const calls = shipped.flatMap(f => f.text.match(/\.rpc\([^)]*\)/g) || []);
   assert.deepEqual(calls, [".rpc('get_my_profile')"]);
 });
+
+test('shipped config uses the real backend, not the dev mock', () => {
+  const config = shipped.find(f => f.path.endsWith('config.js')).text;
+  assert.match(config, /backend:\s*'supabase'/);
+});
+
+test('no identity-based authorization (roles come only from the backend)', () => {
+  noMatch(/gasser|omar/i, 'no hard-coded people / admin emails in frontend code');
+  noMatch(/roles\s*=\s*\[\s*['"](admin|content_manager|section_editor)['"]/, 'roles must not be hard-coded outside the mock');
+});
+
+test('every staff route is role-guarded in the router', () => {
+  const app = shipped.find(f => f.path.endsWith('app.js')).text;
+  const staff = app.split('\n').filter(l => /path:\s*'\/(editor|review|admin)/.test(l));
+  assert.ok(staff.length >= 15, 'staff routes present');
+  for (const line of staff) assert.match(line, /roles:\s*(EDITOR|REVIEWER|ADMIN)|redirect:/, line.trim());
+});
+
+test('workspace backend calls are not wired to guessed tables or RPCs', () => {
+  const ws = shipped.find(f => f.path.endsWith('supabase-workspace.js')).text;
+  assert.doesNotMatch(ws, /\.rpc\(|\.from\(|\.storage\b/, 'connect only once the backend contract is agreed');
+});

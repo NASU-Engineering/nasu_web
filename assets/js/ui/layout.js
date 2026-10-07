@@ -3,17 +3,27 @@
 import { html, mount } from './html.js';
 import { icons } from './icons.js';
 import { isDemoMode, usesSampleContent } from '../services/api.js';
+import { primaryWorkspace } from '../services/roles.js';
 
+// `match`: path prefixes that mark the item active.
 const NAV = [
-  { href: '#/dashboard', match: '/dashboard', label: 'Home', icon: icons.home },
-  { href: '#/subjects', match: '/subjects', label: 'Subjects', icon: icons.book },
-  { href: '#/search', match: '/search', label: 'Search', icon: icons.search },
-  { href: '#/announcements', match: '/announcements', label: 'News', icon: icons.bell },
+  { href: '#/dashboard', match: ['/dashboard'], label: 'Home', icon: icons.home },
+  { href: '#/subjects', match: ['/subjects'], label: 'Subjects', icon: icons.book },
+  { href: '#/resources', match: ['/resources', '/search'], label: 'Resources', short: 'Search', icon: icons.search },
+  { href: '#/assignments', match: ['/assignments'], label: 'Assignments', icon: icons.assignment, desktopOnly: true },
+  { href: '#/announcements', match: ['/announcements'], label: 'News', icon: icons.bell },
+  { href: '#/profile', match: ['/profile'], label: 'Profile', short: 'Me', icon: icons.user, mobileOnly: true },
 ];
 
-const isActive = (item, path) => path === item.match || path.startsWith(item.match + '/');
+const CONSOLE_PREFIXES = ['/editor', '/review', '/admin'];
 
-export function renderLayout({ session, path }) {
+const startsWithAny = (path, prefixes) => prefixes.some(p => path === p || path.startsWith(p + '/'));
+const isActive = (item, path) => startsWithAny(path, item.match);
+export const isConsolePath = path => startsWithAny(path, CONSOLE_PREFIXES);
+
+const navLink = (n, path, label = n.label) => html`<a href="${n.href}" class="${isActive(n, path) ? 'active' : ''}" ${isActive(n, path) ? html`aria-current="page"` : ''}>${label}</a>`;
+
+export function renderLayout({ session, path, access = null }) {
   const topbar = document.getElementById('topbar');
   const bottomnav = document.getElementById('bottomnav');
   const banner = document.getElementById('demoBanner');
@@ -25,30 +35,37 @@ export function renderLayout({ session, path }) {
     mount(banner, html`<strong>Preview</strong> — course material and announcements shown are samples while the hub is being connected.`);
   }
 
+  const inConsole = Boolean(session) && isConsolePath(path);
+  document.body.classList.toggle('is-console', inConsole);
+
   const brand = html`
     <a class="brand" href="${session ? '#/dashboard' : '#/'}" aria-label="NASU Engineering Freshmen Hub — home">
       <span class="mark">${icons.mark}</span>
       <span class="brand-text">
         <span class="brand-name">Freshmen Hub</span>
-        <span class="brand-sub">NASU · Faculty of Engineering</span>
+        <span class="brand-sub">${inConsole ? 'Staff workspace' : 'NASU · Faculty of Engineering'}</span>
       </span>
     </a>`;
 
   if (session) {
+    // Shown only when the backend reports a staff role. UX only.
+    const ws = primaryWorkspace(access?.roles || []);
     mount(topbar, html`
       ${brand}
       <nav class="topnav" aria-label="Main">
-        ${NAV.filter(n => n.match !== '/search').map(n => html`<a href="${n.href}" class="${isActive(n, path) ? 'active' : ''}" ${isActive(n, path) ? html`aria-current="page"` : ''}>${n.label}</a>`)}
+        ${NAV.filter(n => !n.mobileOnly).map(n => navLink(n, path))}
+        ${ws ? html`<a href="#${ws.home}" class="topnav-ws ${inConsole ? 'active' : ''}" ${inConsole ? html`aria-current="page"` : ''}>${icons.shield}<span>Workspace</span></a>` : ''}
       </nav>
       <form class="top-search" role="search" data-top-search>
         ${icons.search}
         <input type="search" name="q" placeholder="Search resources…" aria-label="Search resources" autocomplete="off">
       </form>
+      <a class="icon-btn hide-sm ${path === '/profile' ? 'active' : ''}" href="#/profile" aria-label="Your profile" title="Profile">${icons.user}</a>
       <button type="button" class="icon-btn" data-action="sign-out" aria-label="Sign out" title="Sign out">${icons.logout}</button>
     `);
-    mount(bottomnav, html`${NAV.map(n => html`
+    mount(bottomnav, html`${NAV.filter(n => !n.desktopOnly).map(n => html`
       <a href="${n.href}" class="${isActive(n, path) ? 'active' : ''}" ${isActive(n, path) ? html`aria-current="page"` : ''}>
-        ${n.icon}<span>${n.label}</span>
+        ${n.icon}<span>${n.short || n.label}</span>
       </a>`)}`);
     bottomnav.hidden = false;
     document.body.classList.add('has-bottomnav');

@@ -141,8 +141,8 @@ export async function searchResources({ query, subjectId, category }) {
 function sampleAnnouncements() {
   return [
     { id: 'a1', pinned: true, title: 'Welcome to the Freshmen Hub', body: 'This is a placeholder announcement. Real announcements from the faculty will appear here once the hub is connected.', publishedAt: daysAgo(1), author: 'Prep-Year Office' },
-    { id: 'a2', subjectId: 'math1', title: 'Tutorial room change (sample)', body: 'Sample text: this week’s tutorial moves to another hall. Check your group schedule.', publishedAt: daysAgo(2), author: 'Mathematics I team' },
-    { id: 'a3', subjectId: 'draw', title: 'Bring your drawing tools (sample)', body: 'Sample text: the next board session needs set squares, compass and A3 sheets.', publishedAt: daysAgo(4), author: 'Drawing team' },
+    { id: 'a2', subjectId: 'math1', title: 'Tutorial room change (sample)', body: 'Sample text: this week’s tutorial moves to another hall. Check your group schedule.', publishedAt: daysAgo(2), author: 'Mathematics I team', link_type: 'resource', link_id: 'math1-t1', link_subject_id: 'math1' },
+    { id: 'a3', subjectId: 'draw', title: 'Bring your drawing tools (sample)', body: 'Sample text: the next board session needs set squares, compass and A3 sheets.', publishedAt: daysAgo(4), author: 'Drawing team', link_type: 'subject', link_id: 'draw' },
     { id: 'a4', subjectId: 'chem', title: 'Lab safety briefing (sample)', body: 'Sample text: attendance at the safety briefing is required before the first lab.', publishedAt: daysAgo(7), author: 'Chemistry team' },
   ].map(a => normalizeAnnouncement({ ...a, placeholder: true }));
 }
@@ -154,3 +154,7 @@ export async function listAnnouncements({ subjectId, limit } = {}) {
     .sort((a, b) => (b.pinned - a.pinned) || (b.publishedAt || '').localeCompare(a.publishedAt || ''));
   return limit ? list.slice(0, limit) : list;
 }
+
+/* ---------- staff workspaces (mock) ---------- */
+
+export * from './mock-workspace.js';

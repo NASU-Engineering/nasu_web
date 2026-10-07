@@ -2,11 +2,25 @@ import { html } from '../ui/html.js';
 import { icons } from '../ui/icons.js';
 import { api } from '../services/api.js';
 import { sectionLabel, resourceList, announcementCard, subjectCard, emptyState } from '../ui/components.js';
+import { workspacesFor } from '../services/roles.js';
 
 const settle = p => p.then(value => ({ value }), error => ({ error }));
 const panelError = err => html`<div class="state"><p class="state-text">${err.message}</p></div>`;
 
-export default async function dashboard() {
+const WS_TEXT = {
+  editor: { icon: 'upload', text: 'Upload lectures, sheets and assignments for your sections.' },
+  review: { icon: 'inbox', text: 'Preview, approve or reject submissions from editors.' },
+  admin: { icon: 'shield', text: 'Platform overview, team & roles, students and audit log.' },
+};
+
+// Future modules — links to "coming soon" pages, no data.
+const EXPLORE = [
+  { href: '#/quizzes', icon: 'quiz', label: 'Quizzes' },
+  { href: '#/activities', icon: 'flag', label: 'Activities' },
+  { href: '#/leaderboard', icon: 'trophy', label: 'Leaderboard' },
+];
+
+export default async function dashboard({ access }) {
   // The profile is required; the content panels may fail on their own.
   const [profile, subjects, recent, announcements] = await Promise.all([
     api.profile.getMine(),
@@ -15,6 +29,7 @@ export default async function dashboard() {
     settle(api.announcements.list({ limit: 3 })),
   ]);
   const firstName = profile.fullName.split(' ')[0] || 'there';
+  const workspaces = workspacesFor(access?.roles || []);
 
   return {
     title: 'Dashboard',
@@ -39,6 +54,18 @@ export default async function dashboard() {
         </dl>
       </section>
 
+      ${workspaces.length ? html`
+        <section aria-label="Your workspaces">
+          ${sectionLabel('Your workspaces')}
+          <div class="ws-grid">${workspaces.map(w => html`
+            <a class="ws-card" href="#${w.home}">
+              ${icons[WS_TEXT[w.id].icon]}
+              <span class="ws-text"><strong>${w.label}</strong><span>${WS_TEXT[w.id].text}</span></span>
+              ${icons.chevron}
+            </a>`)}
+          </div>
+        </section>` : ''}
+
       <div class="dash-cols">
         <section>
           ${sectionLabel('Announcements', html`<a class="see-all" href="#/announcements">See all</a>`)}
@@ -57,6 +84,11 @@ export default async function dashboard() {
       <section>
         ${sectionLabel('Your subjects', html`<a class="see-all" href="#/subjects">All subjects</a>`)}
         <div class="subj-grid">${subjects.map(subjectCard)}</div>
+      </section>
+
+      <section aria-label="Coming soon">
+        ${sectionLabel('Coming soon')}
+        <div class="explore">${EXPLORE.map(x => html`<a class="explore-item" href="${x.href}">${icons[x.icon]}<span>${x.label}</span><span class="badge">Soon</span></a>`)}</div>
       </section>`,
   };
 }

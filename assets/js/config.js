@@ -35,6 +35,13 @@ export const CONFIG = {
   // When true, subjects, resources, search and announcements require a signed-in student.
   requireLoginForContent: true,
 
+  // Content uploads (Editor workspace). UX pre-checks only — PROVISIONAL until
+  // the backend confirms its Storage limits; the server is authoritative.
+  uploads: {
+    maxMb: 50,
+    accept: ['.pdf', '.pptx', '.ppt', '.docx', '.doc', '.png', '.jpg', '.jpeg', '.zip'],
+  },
+
   // Legacy resource list from the original site, still read by the mock content.
   legacyResourcesUrl: 'resources.json',
 };

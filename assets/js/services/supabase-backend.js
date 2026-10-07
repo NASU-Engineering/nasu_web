@@ -151,3 +151,8 @@ export async function listAnnouncements(opts) {
   if (sampleContent) return mock.listAnnouncements(opts);
   throw new ApiError('backend_required', 'announcements');
 }
+
+/* ---------- staff workspaces ---------- */
+// Roles, editor uploads, review queue and admin — see supabase-workspace.js.
+
+export * from './supabase-workspace.js';

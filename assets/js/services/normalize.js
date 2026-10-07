@@ -6,7 +6,7 @@ import { categoryById } from '../data/catalog.js';
 export function safeUrl(url) {
   if (typeof url !== 'string' || !url.trim()) return null;
   try {
-    const u = new URL(url, location.href);
+    const u = new URL(url, globalThis.location?.href);
     return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : null;
   } catch { return null; }
 }
@@ -43,6 +43,8 @@ export function normalizeAnnouncement(raw) {
     pinned: Boolean(raw.pinned),
     author: String(raw.author ?? 'Course team'),
     placeholder: Boolean(raw.placeholder),
+    // Optional deep link to Hub content (services/deep-links.js).
+    link: raw.link_type ? { type: String(raw.link_type), id: String(raw.link_id ?? ''), subjectId: raw.link_subject_id || null } : null,
   };
 }
 

@@ -6,9 +6,16 @@
 //   Profile      { fullName, studentId, group, section }
 //   Resource     { id, subjectId, category, title, url|null, format, addedAt, week|null, dueAt|null, placeholder? }
 //   Announcement { id, title, body, subjectId|null, publishedAt, pinned, author, placeholder? }
+//   Access       { roles, scopes, available }        (see docs/ROLE_DASHBOARDS.md for the rest)
+//   ContentItem, Member, AuditEntry, Stats           — services/normalize-workspace.js
 
 import { CONFIG } from '../config.js';
-import { toApiError } from './errors.js';
+import { ApiError, toApiError } from './errors.js';
+import { safeUrl } from './normalize.js';
+import {
+  normalizeAccess, normalizeContentItem, normalizeAuditEntry, normalizeMember,
+  normalizeStats, normalizeGroups, normalizePage,
+} from './normalize-workspace.js';
 import * as mockBackend from './mock-backend.js';
 import * as supabaseBackend from './supabase-backend.js';
 
@@ -29,8 +36,46 @@ function wrap(context, fn) {
 /* ---------- auth events ---------- */
 
 // Listeners receive 'signed_in' | 'signed_out'.
+let accessCache = null; // { key, promise } — see getAccess()
+
 const authListeners = new Set();
-function emitAuthChange(type) { authListeners.forEach(cb => cb(type)); }
+function emitAuthChange(type) {
+  if (type === 'signed_out') accessCache = null;
+  authListeners.forEach(cb => cb(type));
+}
+
+/* ---------- access (roles + scopes), cached per signed-in account ---------- */
+
+// Fails CLOSED: until the backend provides roles, nobody gets a staff workspace.
+export const NO_ACCESS = Object.freeze({ roles: [], scopes: [], available: false });
+
+async function loadAccess() {
+  try {
+    return normalizeAccess(await backend.getMyAccess());
+  } catch (err) {
+    const e = toApiError(err, 'access');
+    if (e.code === 'backend_required') return NO_ACCESS;
+    throw e;
+  }
+}
+
+function getAccess(session, { refresh = false } = {}) {
+  const key = session?.email || '';
+  if (!key) return Promise.resolve(NO_ACCESS);
+  if (refresh || !accessCache || accessCache.key !== key) {
+    const promise = loadAccess();
+    accessCache = { key, promise };
+    promise.catch(() => { if (accessCache?.promise === promise) accessCache = null; }); // retry next time
+  }
+  return accessCache.promise;
+}
+
+const item = raw => {
+  const out = normalizeContentItem(raw);
+  if (!out) throw toApiError(new Error('empty content row'), 'content');
+  return out;
+};
+const items = rows => (Array.isArray(rows) ? rows : []).map(normalizeContentItem).filter(Boolean);
 backend.onAuthChange?.(emitAuthChange);
 
 /* ---------- OAuth redirect handling ---------- */
@@ -115,4 +160,59 @@ export const api = {
   announcements: {
     list: wrap('announcements', ({ subjectId = '', limit } = {}) => backend.listAnnouncements({ subjectId, limit })),
   },
+
+  /* ----- staff workspaces. Every call is authorised by the backend; the UI only hides what it can't use. ----- */
+
+  access: {
+    /** Roles + editor scopes of the signed-in user. NO_ACCESS when the backend has no roles API yet. */
+    getMine: (session, opts) => getAccess(session, opts),
+  },
+
+  catalog: {
+    listGroups: wrap('groups', async () => normalizeGroups(await backend.listGroups())),
+  },
+
+  editor: {
+    listMine: wrap('editor', async ({ status = '' } = {}) => items(await backend.listMyContent({ status: status || undefined }))),
+    get: wrap('editor', async id => item(await backend.getContentItem(id))),
+    /** Upload the file first (uploadFile), then pass its result as `file`. Creates when no id. */
+    saveDraft: wrap('editor', async ({ id = null, values, file = null }) => item(await backend.saveContentDraft({ id, values, file }))),
+    uploadFile: wrap('upload', (file, { onProgress } = {}) => backend.uploadContentFile(file, { onProgress })),
+    submit: wrap('editor', async id => item(await backend.submitContentForReview(id))),
+  },
+
+  review: {
+    /** status: 'pending_review' | 'processed' → { items, nextCursor } */
+    listQueue: wrap('review', async ({ status = 'pending_review', cursor = null, limit } = {}) =>
+      normalizePage(await backend.listReviewQueue({ status, cursor, limit }), normalizeContentItem)),
+    get: wrap('review', async id => item(await backend.getContentItem(id))),
+    /** Short-lived URL for previewing/downloading the submitted file. */
+    getFileUrl: wrap('review', async id => {
+      const { url } = (await backend.getContentFileUrl(id)) || {};
+      const safe = safeUrl(url);
+      if (!safe) throw new ApiError('preview_unavailable');
+      return safe;
+    }),
+    approve: wrap('review', async (id, { note = '' } = {}) => item(await backend.decideContent(id, { decision: 'approve', note }))),
+    reject: wrap('review', async (id, { reason }) => item(await backend.decideContent(id, { decision: 'reject', note: reason }))),
+    publish: wrap('review', async id => item(await backend.publishContent(id))),
+  },
+
+  admin: {
+    getStats: wrap('admin', async () => normalizeStats(await backend.getAdminStats())),
+    listContent: wrap('admin', async (filters = {}) => normalizePage(await backend.listAllContent(filters), normalizeContentItem)),
+    searchMembers: wrap('admin', async ({ query = '', role = '', cursor = null } = {}) =>
+      normalizePage(await backend.searchMembers({ query: query.trim(), role: role || undefined, cursor }), normalizeMember)),
+    grantRole: wrap('admin', async (userId, role) => normalizeMember(await backend.grantRole(userId, role))),
+    revokeRole: wrap('admin', async (userId, role) => normalizeMember(await backend.revokeRole(userId, role))),
+    setEditorScopes: wrap('admin', async (userId, scopes) => normalizeMember(await backend.setEditorScopes(userId, scopes))),
+    listAuditLog: wrap('admin', async ({ cursor = null, action = '', limit } = {}) =>
+      normalizePage(await backend.listAuditLog({ cursor, action: action || undefined, limit }), normalizeAuditEntry)),
+  },
+
+  // DEV ONLY (mock backend): lets reviewers preview each role's UI. Absent in production.
+  dev: isDemoMode ? {
+    getDemoRoles: () => backend.getDemoRoles(),
+    setDemoRoles: async roles => { await backend.setDemoRoles(roles); accessCache = null; },
+  } : null,
 };

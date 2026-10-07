@@ -1,9 +1,9 @@
 import { html, mount } from '../ui/html.js';
 import { api } from '../services/api.js';
 import { SUBJECTS } from '../data/catalog.js';
-import { pageHead, announcementCard, chips, emptyState } from '../ui/components.js';
+import { pageHead, announcementCard, chips, emptyState, focusLinkedItem } from '../ui/components.js';
 
-export default async function announcements() {
+export default async function announcements({ query }) {
   const all = await api.announcements.list();
   const chipItems = [
     { value: '', label: 'All' },
@@ -26,6 +26,7 @@ export default async function announcements() {
       <div id="annBody">${list('')}</div>`,
     bind(root) {
       const bodyEl = root.querySelector('#annBody');
+      focusLinkedItem(root, query.item); // deep link: #/announcements?item=<id>
       root.querySelectorAll('.chip').forEach(btn => btn.addEventListener('click', () => {
         root.querySelectorAll('.chip').forEach(b => {
           b.classList.toggle('on', b === btn);
