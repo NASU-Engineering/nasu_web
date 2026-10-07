@@ -35,11 +35,12 @@ export const CONFIG = {
   // When true, subjects, resources, search and announcements require a signed-in student.
   requireLoginForContent: true,
 
-  // Content uploads (Editor workspace). UX pre-checks only — PROVISIONAL until
-  // the backend confirms its Storage limits; the server is authoritative.
+  // Content uploads (Editor workspace). UX pre-checks mirroring the backend's
+  // 'content-files' bucket (50 MiB; PDF, images, Office, plain text).
+  // Storage RLS and bucket settings are authoritative.
   uploads: {
     maxMb: 50,
-    accept: ['.pdf', '.pptx', '.ppt', '.docx', '.doc', '.png', '.jpg', '.jpeg', '.zip'],
+    accept: ['.pdf', '.jpg', '.jpeg', '.png', '.webp', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt'],
   },
 
   // Legacy resource list from the original site, still read by the mock content.

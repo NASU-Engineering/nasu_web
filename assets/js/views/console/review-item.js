@@ -65,7 +65,7 @@ export default async function reviewItem({ access, path, params, reload }) {
         btn.disabled = true;
         msg.textContent = 'Getting a secure link…';
         try {
-          const url = await api.review.getFileUrl(item.id);
+          const url = await api.review.getFileUrl(item);
           if (win) { win.opener = null; win.location.href = url; } else location.assign(url);
           msg.textContent = '';
         } catch (ex) {

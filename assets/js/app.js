@@ -35,7 +35,7 @@ const content = CONFIG.requireLoginForContent;
 
 // Role guards below are UX only (which screens to offer). Every request those
 // screens make is authorised by the backend (RLS / RPC role checks).
-const EDITOR = ['section_editor'];
+const EDITOR = ['section_editor', 'admin']; // admins may upload without an editor scope
 const REVIEWER = ['content_manager', 'admin'];
 const ADMIN = ['admin'];
 

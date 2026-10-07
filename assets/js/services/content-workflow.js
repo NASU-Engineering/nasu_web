@@ -13,7 +13,9 @@ export const STATUSES = {
   approved:       { id: 'approved',       label: 'Approved',       tone: 'ok' },
   rejected:       { id: 'rejected',       label: 'Rejected',       tone: 'bad' },
   published:      { id: 'published',      label: 'Published',      tone: 'live' },
+  archived:       { id: 'archived',       label: 'Archived',       tone: 'neutral' },
 };
+// Note: the backend calls 'pending_review' simply 'pending' (mapped in the Supabase adapter).
 
 export const STATUS_IDS = Object.keys(STATUSES);
 export const statusMeta = id => STATUSES[id] || { id, label: id || 'Unknown', tone: 'neutral' };
@@ -87,6 +89,31 @@ export function countByStatus(items) {
   const out = Object.fromEntries(STATUS_IDS.map(s => [s, 0]));
   for (const it of items || []) if (it.status in out) out[it.status]++;
   return out;
+}
+
+/** File name reduced to [a-z0-9._-], extension kept, at most 80 characters. */
+export function safeFileName(name) {
+  const raw = String(name || 'file').normalize('NFKD').replace(/[̀-ͯ]/g, '');
+  const ext = extOf(raw).replace(/[^a-z0-9.]/g, '').slice(0, 10);
+  const base = raw.slice(0, raw.length - extOf(raw).length).toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-').replace(/^[-.]+|[-.]+$/g, '').replace(/-{2,}/g, '-') || 'file';
+  return base.slice(0, 80 - ext.length) + ext;
+}
+
+const randomToken = () => {
+  const c = globalThis.crypto;
+  if (c?.randomUUID) return c.randomUUID().replace(/-/g, '').slice(0, 12);
+  return Math.random().toString(36).slice(2, 14);
+};
+
+/**
+ * Storage object path for an upload: <subject_id>/<content_item_id>/<unique-safe-filename>.
+ * Unique every time, so a replacement never overwrites an existing object.
+ */
+export function storageObjectPath(subjectId, itemId, fileName, token = randomToken()) {
+  const seg = v => String(v).replace(/[^A-Za-z0-9_-]/g, '');
+  if (!seg(subjectId) || !seg(itemId)) throw new Error('storageObjectPath: subject and item id are required');
+  return `${seg(subjectId)}/${seg(itemId)}/${Date.now().toString(36)}-${seg(token)}-${safeFileName(fileName)}`;
 }
 
 export function formatBytes(n) {

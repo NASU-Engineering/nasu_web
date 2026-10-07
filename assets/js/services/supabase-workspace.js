@@ -1,86 +1,226 @@
 // Supabase adapter for the role-based workspaces (roles, editor uploads,
 // review queue, admin). Re-exported by supabase-backend.js.
 //
-// NOT CONNECTED YET. The backend tables (user_roles, editor_scopes,
-// content_items, audit_logs) exist, but their exact API — RPC names, columns,
-// Storage bucket and policies — is owned by the backend and not confirmed.
-// Rather than guess, every function below throws 'backend_required'. The
-// frontend treats that as "not available" and fails CLOSED: no workspace is
-// shown, the student hub keeps working.
-//
-// To connect: implement each function against the agreed contract and return
-// the RAW row shapes listed in docs/ROLE_DASHBOARDS.md (api.js normalises them).
-// Rules for whoever fills these in:
-//   - use the shared client from supabase-client.js (publishable key only)
-//   - never pass a user id for "me" — the backend resolves the caller from the JWT
-//   - privileged writes go through RPCs / policies that re-check the caller's role
-//   - map errors to ApiError codes: 42501 / PGRST301 → 'forbidden' or
-//     'unauthenticated', 23505 / stale version → 'conflict', 22023 / 23514 → 'invalid'
+// Wired to the Phase 1 backend contract (docs/ROLE_DASHBOARDS.md). Rules:
+//   - only the RPCs listed in RPC below, with exactly the documented arguments
+//   - "me" is never sent — the backend resolves the caller from the JWT
+//   - Storage: private bucket 'content-files', upsert:false, short signed URLs
+//     only (never public URLs). Storage RLS decides who may write/read.
+//   - audit rows are written by the backend, never from here
+// Functions return RAW rows; api.js normalises them (normalize-workspace.js).
+// Backend status 'pending' is the UI's 'pending_review' (mapped in/out here
+// and in normalize-workspace.js).
 
-import { ApiError } from './errors.js';
+import { ApiError, logDev } from './errors.js';
+import { getSupabase } from './supabase-client.js';
+import { ASSIGNABLE_ROLES } from './roles.js';
+import { storageObjectPath, PROCESSED_STATUSES } from './content-workflow.js';
 
-const notReady = contract => async () => { throw new ApiError('backend_required', contract); };
+export const BUCKET = 'content-files';
+export const SIGNED_URL_SECONDS = 300;
 
-/* ---------- access ---------- */
+export const RPC = {
+  getMyAccess: 'get_my_access',
+  listGroups: 'list_groups',
+  listMyContent: 'list_my_content',
+  getContentItem: 'get_content_item',
+  saveContentDraft: 'save_content_draft',
+  submitContentForReview: 'submit_content_for_review',
+  listReviewQueue: 'list_review_queue',
+  reviewContent: 'review_content',
+  publishContent: 'publish_content',
+  getAdminStats: 'get_admin_stats',
+  adminListContent: 'admin_list_content',
+  adminSearchMembers: 'admin_search_members',
+  adminGrantRole: 'admin_grant_role',
+  adminRevokeRole: 'admin_revoke_role',
+  adminSetEditorScopes: 'admin_set_editor_scopes',
+  adminListAuditLog: 'admin_list_audit_log',
+};
 
-// → { roles: ['student' | 'section_editor' | 'content_manager' | 'admin', …],
-//     scopes: [{ id, subject_id, group_name|null, section|null }] }   (scopes: section editors only)
-export const getMyAccess = notReady('get_my_access');
+// CONTRACT GAP: the parameter list of save_content_draft(...) has not been
+// confirmed. Until it is, draft creation fails closed with 'backend_required'
+// instead of guessing argument names. When confirmed, set this to true and
+// make draftArgs() below match the real signature exactly.
+export const SAVE_DRAFT_CONTRACT_CONFIRMED = false;
 
-// → [{ group_name, sections: [string] }]
-export const listGroups = notReady('list_groups');
+export function draftArgs(id, values, file) {
+  return {
+    p_id: id,
+    p_subject_id: values.subjectId,
+    p_content_type: values.contentType,
+    p_week: values.week === '' || values.week == null ? null : Number(values.week),
+    p_group_name: values.group ?? null,
+    p_section: values.section ?? null,
+    p_title: values.title,
+    p_description: values.description || '',
+    p_storage_path: file?.storagePath ?? null,
+    p_file_name: file?.name ?? null,
+    p_file_size: file?.size ?? null,
+    p_file_mime_type: file?.mimeType ?? null,
+  };
+}
 
-/* ---------- editor ---------- */
+// UI status ids → backend status values.
+export const toBackendStatus = s => (s === 'pending_review' ? 'pending' : s);
 
-// ({ status? }) → [content_item]   — the caller's own submissions only
-export const listMyContent = notReady('list_my_content');
+const isNetwork = e => e?.name === 'AuthRetryableFetchError' || e?.status === 0 || e instanceof TypeError || /fetch|network/i.test(e?.message || '') && !e?.code;
 
-// (id) → content_item              — only if the caller may see it
-export const getContentItem = notReady('get_content_item');
+/** Maps a PostgREST / Storage error to an ApiError code (server text never reaches the UI). */
+export function toWorkspaceError(error, context) {
+  if (error instanceof ApiError) return error;
+  logDev(context, error);
+  const code = String(error?.code ?? '');
+  const status = Number(error?.statusCode ?? error?.status ?? 0);
+  if (isNetwork(error)) return new ApiError('network', error);
+  if (code === 'PGRST301' || code === 'PGRST302' || status === 401) return new ApiError('unauthenticated', error);
+  if (code === '42501' || status === 403) return new ApiError('forbidden', error);
+  if (code === 'PGRST202' || code === '42883') return new ApiError('backend_required', error); // RPC/args mismatch
+  if (code === 'PGRST116' || code === 'P0002' || status === 404) return new ApiError('not_found', error);
+  if (code === '23505' || code === '40001' || status === 409) return new ApiError('conflict', error);
+  if (['P0001', '22023', '23514', '22P02', '23502', '22001'].includes(code) || status === 400 || status === 413 || status === 415) return new ApiError('invalid', error);
+  return new ApiError('unknown', error);
+}
 
-// ({ id?, values: { subjectId, contentType, week, group, section, title, description }, file? })
-//   → content_item (status 'draft'). Backend checks the target is inside the caller's editor_scopes.
-//   `file` = the object returned by uploadContentFile.
-export const saveContentDraft = notReady('save_content_draft');
+const one = data => (Array.isArray(data) ? data[0] ?? null : data ?? null);
 
-// (file: File, { onProgress?(fraction) }) → { file_ref, file_name, file_size, file_mime_type }
-//   Storage bucket/path/policies decided by the backend. file_ref is opaque to the frontend.
-export const uploadContentFile = notReady('upload_content_file');
+/** Builds the adapter around a client getter (tests pass a fake client). */
+export function createWorkspaceAdapter(getClient, { saveDraftConfirmed = SAVE_DRAFT_CONTRACT_CONFIRMED } = {}) {
+  async function rpc(name, args) {
+    const sb = await getClient();
+    const { data, error } = args === undefined ? await sb.rpc(name) : await sb.rpc(name, args);
+    if (error) throw toWorkspaceError(error, name);
+    return data;
+  }
+  const pageArgs = (cursor, limit) => ({ p_cursor: cursor ?? null, p_limit: limit ?? 50 });
 
-// (id) → content_item (status 'pending_review')
-export const submitContentForReview = notReady('submit_content_for_review');
+  /* ---------- access ---------- */
 
-/* ---------- review (content_manager, admin) ---------- */
+  const getMyAccess = async () => one(await rpc(RPC.getMyAccess));
+  const listGroups = async () => rpc(RPC.listGroups);
 
-// ({ status: 'pending_review' | 'processed', cursor?, limit? }) → { items: [content_item], next_cursor }
-export const listReviewQueue = notReady('list_review_queue');
+  /* ---------- editor ---------- */
 
-// (id) → { url, expires_at }   — short-lived signed URL for preview/download
-export const getContentFileUrl = notReady('get_content_file_url');
+  // The RPC takes no filter; status filtering happens in the UI.
+  const listMyContent = async () => rpc(RPC.listMyContent);
+  const getContentItem = async id => {
+    const row = one(await rpc(RPC.getContentItem, { p_id: id }));
+    if (!row) throw new ApiError('not_found');
+    return row;
+  };
 
-// (id, { decision: 'approve' | 'reject', note }) → content_item   (reject requires note)
-export const decideContent = notReady('review_content');
+  async function saveDraftRow(id, values, file) {
+    if (!saveDraftConfirmed) throw new ApiError('backend_required', 'save_content_draft parameters not confirmed');
+    return one(await rpc(RPC.saveContentDraft, draftArgs(id, values, file)));
+  }
 
-// (id) → content_item (status 'published')
-export const publishContent = notReady('publish_content');
+  async function uploadToStorage(subjectId, itemId, file, onProgress) {
+    const sb = await getClient();
+    const path = storageObjectPath(subjectId, itemId, file.name);
+    onProgress?.(0);
+    // supabase-js has no upload progress; the bar shows start → done.
+    const { error } = await sb.storage.from(BUCKET).upload(path, file, {
+      upsert: false, // never overwrite: a replacement is a new unique object
+      contentType: file.type || undefined,
+      cacheControl: '3600',
+    });
+    if (error) throw toWorkspaceError(error, 'storage-upload');
+    onProgress?.(1);
+    return { storagePath: path, name: file.name, size: file.size, mimeType: file.type || '' };
+  }
 
-/* ---------- admin ---------- */
+  /**
+   * Draft with an optional file, per the backend's upload architecture:
+   *   1. save_content_draft → an id exists
+   *   2. upload to <subject_id>/<content_item_id>/<unique-safe-filename> (upsert:false)
+   *   3. save_content_draft again with storage_path + file metadata
+   */
+  async function saveContentDraft({ id = null, values, file = null, onProgress }) {
+    let row = await saveDraftRow(id, values, null);
+    const itemId = row?.id ?? id;
+    if (!itemId) throw new ApiError('unknown', 'save_content_draft returned no id');
+    if (file) {
+      try {
+        const uploaded = await uploadToStorage(values.subjectId, itemId, file, onProgress);
+        row = await saveDraftRow(itemId, values, uploaded);
+      } catch (err) {
+        // The draft exists now: tell the caller so a retry updates it instead of creating another.
+        const e = toWorkspaceError(err, 'save-with-file');
+        e.contentItemId = String(itemId);
+        throw e;
+      }
+    }
+    return row;
+  }
 
-// → { total_students, section_editors, content_managers, pending_reviews, published_resources, quizzes, activities }
-export const getAdminStats = notReady('get_admin_stats');
+  const submitContentForReview = async id => one(await rpc(RPC.submitContentForReview, { p_id: id }));
 
-// ({ status?, subjectId?, query?, cursor? }) → { items: [content_item], next_cursor }
-export const listAllContent = notReady('admin_list_content');
+  /* ---------- review ---------- */
 
-// ({ query?, role?, cursor? }) → { items: [member], next_cursor }
-export const searchMembers = notReady('admin_search_members');
+  // 'processed' isn't a backend status: fetch approved, rejected and published
+  // (first page each) and merge them newest first. Load-more works per status.
+  async function listReviewQueue({ status = 'pending_review', cursor = null, limit } = {}) {
+    if (status !== 'processed') {
+      return rpc(RPC.listReviewQueue, { p_status: toBackendStatus(status), ...pageArgs(cursor, limit) });
+    }
+    const pages = await Promise.all(PROCESSED_STATUSES.map(s =>
+      rpc(RPC.listReviewQueue, { p_status: s, ...pageArgs(null, limit) })));
+    const rows = pages.flatMap(p => (Array.isArray(p) ? p : p?.items || []));
+    rows.sort((a, b) => String(b.reviewed_at || b.updated_at || '').localeCompare(String(a.reviewed_at || a.updated_at || '')));
+    return { items: rows, next_cursor: null };
+  }
 
-// (userId, role) → member      role ∈ section_editor | content_manager
-export const grantRole = notReady('admin_grant_role');
-export const revokeRole = notReady('admin_revoke_role');
+  /** Short-lived signed URL for an item's file. Storage SELECT RLS decides access. */
+  async function getContentFileUrl({ id, storagePath }) {
+    let path = storagePath;
+    if (!path) path = (await getContentItem(id))?.storage_path;
+    if (!path) throw new ApiError('preview_unavailable');
+    const sb = await getClient();
+    const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(path, SIGNED_URL_SECONDS);
+    if (error) throw toWorkspaceError(error, 'storage-signed-url');
+    return { url: data?.signedUrl ?? null };
+  }
 
-// (userId, scopes: [{ subjectId, group|null, section|null }]) → member   (replaces the set)
-export const setEditorScopes = notReady('admin_set_editor_scopes');
+  const decideContent = async (id, { decision, note }) =>
+    one(await rpc(RPC.reviewContent, { p_id: id, p_decision: decision, p_note: note ?? '' }));
+  const publishContent = async id => one(await rpc(RPC.publishContent, { p_id: id }));
 
-// ({ cursor?, action?, limit? }) → { items: [audit_entry], next_cursor }
-export const listAuditLog = notReady('admin_list_audit_log');
+  /* ---------- admin ---------- */
+
+  const getAdminStats = async () => one(await rpc(RPC.getAdminStats));
+  // Subject/text filters aren't RPC arguments; the UI filters what's loaded.
+  const listAllContent = async ({ status, cursor, limit } = {}) =>
+    rpc(RPC.adminListContent, { p_status: status ? toBackendStatus(status) : null, ...pageArgs(cursor, limit) });
+  // No role filter or cursor in the RPC; the UI filters by role on the results.
+  const searchMembers = async ({ query = '', limit } = {}) =>
+    rpc(RPC.adminSearchMembers, { p_query: query, p_limit: limit ?? 50 });
+
+  function assertAssignable(role) {
+    // The backend also refuses anything else; 'admin' is never sent from the UI.
+    if (!ASSIGNABLE_ROLES.includes(role)) throw new ApiError('forbidden', `role ${role} is not assignable from the UI`);
+  }
+  const grantRole = async (userId, role) => { assertAssignable(role); return one(await rpc(RPC.adminGrantRole, { p_user_id: userId, p_role: role })); };
+  const revokeRole = async (userId, role) => { assertAssignable(role); return one(await rpc(RPC.adminRevokeRole, { p_user_id: userId, p_role: role })); };
+  const setEditorScopes = async (userId, scopes) => one(await rpc(RPC.adminSetEditorScopes, {
+    p_user_id: userId,
+    p_scopes: scopes.map(s => ({ subject_id: s.subjectId, group_name: s.group ?? null, section: s.section ?? null })),
+  }));
+  // No action filter in the RPC; the UI filters what's loaded.
+  const listAuditLog = async ({ cursor, limit } = {}) => rpc(RPC.adminListAuditLog, pageArgs(cursor, limit));
+
+  return {
+    getMyAccess, listGroups,
+    listMyContent, getContentItem, saveContentDraft, submitContentForReview,
+    listReviewQueue, getContentFileUrl, decideContent, publishContent,
+    getAdminStats, listAllContent, searchMembers, grantRole, revokeRole, setEditorScopes, listAuditLog,
+  };
+}
+
+const live = createWorkspaceAdapter(getSupabase);
+
+export const {
+  getMyAccess, listGroups,
+  listMyContent, getContentItem, saveContentDraft, submitContentForReview,
+  listReviewQueue, getContentFileUrl, decideContent, publishContent,
+  getAdminStats, listAllContent, searchMembers, grantRole, revokeRole, setEditorScopes, listAuditLog,
+} = live;

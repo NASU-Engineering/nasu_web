@@ -29,7 +29,9 @@ export default async function editorOverview({ access, path }) {
         <div id="edStats" class="stat-grid"></div>
         <div class="console-cols">
           ${panel('Needs your attention', html`<div id="edRejected"></div>`)}
-          ${panel('Your scope', scopesList(access.scopes))}
+          ${panel('Your scope', access.roles.includes('admin')
+            ? html`<p class="muted">As an admin you can upload for every subject, group and section.</p>`
+            : scopesList(access.scopes))}
         </div>
         ${panel('Recent uploads', html`<div id="edRecent"></div>`, { action: html`<a class="see-all" href="#/editor/uploads">All uploads</a>` })}`,
     }),

@@ -7,7 +7,7 @@ import {
 } from '../assets/js/services/content-workflow.js';
 
 test('workflow statuses and the actions the UI offers for each', () => {
-  assert.deepEqual(STATUS_IDS, ['draft', 'pending_review', 'approved', 'rejected', 'published']);
+  assert.deepEqual(STATUS_IDS, ['draft', 'pending_review', 'approved', 'rejected', 'published', 'archived']);
   const table = Object.fromEntries(STATUS_IDS.map(s => [s, [isEditable(s), canSubmit(s), canDecide(s), canPublish(s)]]));
   assert.deepEqual(table, {
     draft:          [true, true, false, false],
@@ -15,6 +15,7 @@ test('workflow statuses and the actions the UI offers for each', () => {
     approved:       [false, false, false, true],
     rejected:       [true, true, false, false],
     published:      [false, false, false, false],
+    archived:       [false, false, false, false],
   });
   assert.equal(statusMeta('rejected').tone, 'bad');
   assert.equal(statusMeta('weird').label, 'weird');

@@ -8,7 +8,7 @@
 import { ApiError } from './errors.js';
 import { normalizeRoles, inScope, ASSIGNABLE_ROLES } from './roles.js';
 import { normalizeScope } from './normalize-workspace.js';
-import { canSubmit, canDecide, canPublish, isEditable, validateDecision } from './content-workflow.js';
+import { canSubmit, canDecide, canPublish, isEditable, validateDecision, storageObjectPath } from './content-workflow.js';
 
 const SESSION_KEY = 'nasu.mock.session';
 const ROLES_KEY = 'nasu.mock.roles';
@@ -64,7 +64,7 @@ function seed() {
   };
   const who = id => { const p = people.find(x => x.user_id === id); return { id, full_name: p.full_name, student_id: p.student_id }; };
   const reviewer = who('mock-user-3');
-  const file = (name, size) => ({ file_ref: `mock/${name}`, file_name: name, file_size: size, file_mime_type: 'application/pdf' });
+  const file = (name, size) => ({ storage_path: `mock/${name}`, file_name: name, file_size: size, file_mime_type: 'application/pdf' });
 
   const items = [
     { id: 'c1', title: 'Lecture 3 — Limits (draft)', description: 'Slides for week 3.', subject_id: 'math1', content_type: 'lecture', week: 3, group_name: GA, section: 'Section 1', status: 'draft', ...file('math1-lecture-3.pdf', 2_400_000), submitter: who(ME), created_at: daysAgo(1), updated_at: daysAgo(1) },
@@ -133,7 +133,7 @@ export async function listGroups() {
 
 export async function listMyContent({ status } = {}) {
   await delay();
-  requireRole('section_editor');
+  requireRole('section_editor', 'admin');
   return db().items.filter(i => i.submitter?.id === ME && (!status || i.status === status)).sort(newest('updated_at'));
 }
 
@@ -146,17 +146,26 @@ export async function getContentItem(id) {
   return item;
 }
 
-export async function saveContentDraft({ id, values, file }) {
+// Same shape as the real flow: save draft → "upload" → save with storage path.
+export async function saveContentDraft({ id, values, file, onProgress }) {
   await delay(400);
-  requireRole('section_editor');
+  const me = requireRole('section_editor', 'admin');
   const d = db();
   const target = { subjectId: values.subjectId, group: values.group ?? null, section: values.section ?? null };
-  if (!inScope(myScopes(d), target)) throw new ApiError('forbidden', 'mock: outside editor scope');
+  // Admins may upload anywhere; editors only inside their scope.
+  if (!me.roles.includes('admin') && !inScope(myScopes(d), target)) throw new ApiError('forbidden', 'mock: outside editor scope');
+  let stored = null;
+  if (file) {
+    // No bytes are stored in mock mode — only the file's name and size.
+    for (let p = 0; p < 1; p += 0.25) { onProgress?.(p); await delay(100); }
+    onProgress?.(1);
+    stored = { file_name: file.name, file_size: file.size, file_mime_type: file.type || '' };
+  }
   const fields = {
     title: values.title.trim(), description: (values.description || '').trim(), subject_id: values.subjectId,
     content_type: values.contentType, week: values.week ? Number(values.week) : null,
     group_name: target.group, section: target.section, updated_at: now(),
-    ...(file ? { file_ref: file.file_ref, file_name: file.file_name, file_size: file.file_size, file_mime_type: file.file_mime_type } : {}),
+    ...(stored || {}),
   };
   let item;
   if (id) {
@@ -168,22 +177,15 @@ export async function saveContentDraft({ id, values, file }) {
     item = { id: `c${++d.seq}`, status: 'draft', submitter: person(d, ME), created_at: now(), ...fields };
     d.items.unshift(item);
   }
+  if (stored) item.storage_path = storageObjectPath(values.subjectId, item.id, file.name); // <subject>/<item id>/<unique name>
   log(d, id ? 'content.updated' : 'content.created', 'content_item', item.id, { title: item.title });
   save(d);
   return item;
 }
 
-export async function uploadContentFile(file, { onProgress } = {}) {
-  requireRole('section_editor');
-  // No bytes are stored in mock mode — only the file's name and size.
-  for (let p = 0.2; p < 1; p += 0.2) { await delay(120); onProgress?.(p); }
-  onProgress?.(1);
-  return { file_ref: `mock/${Date.now()}-${file.name}`, file_name: file.name, file_size: file.size, file_mime_type: file.type || '' };
-}
-
 export async function submitContentForReview(id) {
   await delay(300);
-  requireRole('section_editor');
+  requireRole('section_editor', 'admin');
   const d = db();
   const item = d.items.find(i => i.id === id && i.submitter?.id === ME);
   if (!item) throw new ApiError('not_found');

@@ -39,8 +39,13 @@ function person(raw) {
   return { id: strOrNull(raw.id ?? raw.user_id), fullName: str(raw.full_name), studentId: str(raw.student_id) };
 }
 
+// Backend status 'pending' is the UI's 'pending_review'.
+const STATUS_IN = { pending: 'pending_review' };
+
 export function normalizeContentItem(raw) {
   if (!raw || typeof raw !== 'object') return null;
+  const status = STATUS_IN[raw.status] || raw.status;
+  const hasFile = Boolean(raw.storage_path || raw.file_name);
   return {
     id: str(raw.id),
     title: str(raw.title) || 'Untitled',
@@ -50,8 +55,13 @@ export function normalizeContentItem(raw) {
     week: numOrNull(raw.week),
     group: strOrNull(raw.group_name),
     section: strOrNull(raw.section),
-    status: STATUSES[raw.status] ? raw.status : 'draft',
-    file: raw.file_name ? { name: str(raw.file_name), size: numOrNull(raw.file_size), mimeType: str(raw.file_mime_type) } : null,
+    status: STATUSES[status] ? status : 'draft',
+    file: hasFile ? {
+      name: str(raw.file_name) || str(raw.storage_path).split('/').pop(),
+      size: numOrNull(raw.file_size),
+      mimeType: str(raw.file_mime_type),
+      storagePath: strOrNull(raw.storage_path),
+    } : null,
     submitter: person(raw.submitter),
     reviewer: person(raw.reviewer),
     reviewNote: str(raw.review_note),
@@ -99,12 +109,23 @@ export function normalizeStats(raw) {
   return Object.fromEntries(STAT_KEYS.map(k => [k, numOrNull(raw?.[k])]));
 }
 
-/** [{ name, sections: [..] }] — groups and their sections. */
+/**
+ * [{ name, sections: [..] }] — groups and their sections. Accepts either one row
+ * per group ({ group_name, sections: [] }) or one row per section ({ group_name, section }).
+ */
 export function normalizeGroups(raw) {
   if (!Array.isArray(raw)) return [];
-  return raw
-    .filter(g => g && g.group_name)
-    .map(g => ({ name: String(g.group_name), sections: Array.isArray(g.sections) ? g.sections.map(String) : [] }));
+  const byName = new Map();
+  for (const g of raw) {
+    if (!g || !g.group_name) continue;
+    const name = String(g.group_name);
+    if (!byName.has(name)) byName.set(name, []);
+    const list = byName.get(name);
+    const add = s => { if (s != null && s !== '' && !list.includes(String(s))) list.push(String(s)); };
+    if (Array.isArray(g.sections)) g.sections.forEach(add);
+    else add(g.section);
+  }
+  return [...byName].map(([name, sections]) => ({ name, sections }));
 }
 
 /** Pages: { items, nextCursor } */

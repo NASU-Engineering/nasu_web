@@ -38,7 +38,8 @@ export const hasAnyRole = (roles, wanted) => wanted.some(r => hasRole(roles, r))
 // Each staff workspace and the roles that see it. The student hub is not listed:
 // it is available to anyone with a hub profile (unchanged behaviour).
 export const WORKSPACES = [
-  { id: 'editor', label: 'Editor', roles: ['section_editor'], home: '/editor' },
+  // Admins may create/upload content without the editor role or a scope (backend rule).
+  { id: 'editor', label: 'Editor', roles: ['section_editor', 'admin'], home: '/editor' },
   { id: 'review', label: 'Review', roles: ['content_manager', 'admin'], home: '/review' },
   { id: 'admin',  label: 'Admin',  roles: ['admin'], home: '/admin' },
 ];
@@ -136,6 +137,15 @@ export function scopeOptions(scopes, groups = []) {
   }
 
   return { subjects, groupsFor, sectionsFor };
+}
+
+/**
+ * Scopes the upload form should offer. Admins are unrestricted (every subject,
+ * all groups/sections); section editors get their assigned scopes. UX only.
+ */
+export function uploadScopes(access, subjectIds) {
+  if (hasRole(access?.roles, 'admin')) return subjectIds.map(subjectId => ({ subjectId, group: null, section: null }));
+  return hasRole(access?.roles, 'section_editor') ? access.scopes || [] : [];
 }
 
 export const scopeLabel = s =>

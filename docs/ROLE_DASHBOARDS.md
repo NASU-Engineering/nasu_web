@@ -1,18 +1,53 @@
 # Role-based dashboards — frontend ↔ backend contract
 
-Status: **frontend built, backend not connected.** Every staff call in
-`assets/js/services/supabase-workspace.js` currently throws `backend_required`.
-The UI fails **closed**: with no roles API, nobody sees a staff workspace and the
-student hub works exactly as before.
+Status: **wired to the Backend Phase 1 RPCs** (see *Phase 1 wiring* below),
+except `save_content_draft`, whose parameter list is not yet confirmed — draft
+creation/upload fails closed (`backend_required`) until it is. If roles can't be
+loaded, nobody sees a staff workspace and the student hub works as before.
+
+## Phase 1 wiring (implemented)
+
+| Adapter | RPC call sent | Source of the argument list |
+|---|---|---|
+| `getMyAccess` | `get_my_access()` | stated |
+| `listGroups` | `list_groups()` | stated |
+| `listMyContent` | `list_my_content()` — status filter applied in the UI | stated |
+| `getContentItem` | `get_content_item({ p_id })` | stated + live hint |
+| `saveContentDraft` | **blocked** — `save_content_draft(...)` params unconfirmed (`SAVE_DRAFT_CONTRACT_CONFIRMED = false`) | — |
+| `submitContentForReview` | `submit_content_for_review({ p_id })` | stated + live hint |
+| `listReviewQueue` | `list_review_queue({ p_status, p_cursor, p_limit })`; UI `pending_review` → `pending`; "Processed" = 3 calls (`approved`, `rejected`, `published`) merged | stated |
+| `decideContent` | `review_content({ p_id, p_decision, p_note })`, decision `approve`/`reject` | stated + live hint |
+| `publishContent` | `publish_content({ p_id })` | stated + live hint |
+| `getContentFileUrl` | `storage.from('content-files').createSignedUrl(storage_path, 300)` — no RPC | stated |
+| `getAdminStats` | `get_admin_stats()` | stated |
+| `listAllContent` | `admin_list_content({ p_status, p_cursor, p_limit })`; subject/text filter in the UI | stated |
+| `searchMembers` | `admin_search_members({ p_query, p_limit })`; role filter in the UI, no paging | stated |
+| `grantRole` / `revokeRole` | `admin_grant_role` / `admin_revoke_role({ p_user_id, p_role })`; `admin` refused client-side before sending | stated |
+| `setEditorScopes` | `admin_set_editor_scopes({ p_user_id, p_scopes: [{ subject_id, group_name, section }] })` | stated + live hint (element shape assumed) |
+| `listAuditLog` | `admin_list_audit_log({ p_cursor, p_limit })`; action filter in the UI | stated |
+
+Upload flow (once `save_content_draft` is confirmed): `save_content_draft` →
+`storage.from('content-files').upload('<subject_id>/<content_item_id>/<ts>-<random>-<safe-name>', file, { upsert: false })`
+→ `save_content_draft` again with the storage path + file metadata → `submit_content_for_review`.
+A replacement file always gets a new object path. If the upload fails after the
+draft exists, the error carries the draft id so a retry updates it instead of
+creating another.
+
+**Response shapes are not yet verified against a live authenticated call.** The
+adapter/normalisers expect the row shapes listed below (backend `pending` is
+accepted for `pending_review`; `storage_path` is read for files; `list_groups`
+may return one row per group or per section). Single-row results may be an
+object or a one-element array; list results may be an array or `{ items, next_cursor }`.
 
 > **Security model.** Role checks in the frontend (route guards, hidden buttons)
 > are **UX only**. Supabase (RLS, `SECURITY DEFINER`/`INVOKER` RPC checks,
 > Storage policies) is the only authority. The frontend never sends a user id
 > for "me", never holds a privileged key, and never decides an outcome itself.
 
-Everything below is a **proposal** from the frontend. Names are suggestions —
-whatever the backend owner chooses, only `supabase-workspace.js` (calls) and
-`normalize-workspace.js` (field mapping) need to change.
+The sections below are the original frontend **proposal**, kept for the row
+shapes the UI reads. Where Phase 1 differs, the table above wins; only
+`supabase-workspace.js` (calls) and `normalize-workspace.js` (field mapping)
+need to change for further adjustments.
 
 ## Roles
 
@@ -21,12 +56,12 @@ whatever the backend owner chooses, only `supabase-workspace.js` (calls) and
 | Workspace | Shown to | Routes |
 |---|---|---|
 | Student hub | anyone with a profile | `/dashboard`, `/subjects…`, `/resources`, `/assignments`, `/announcements`, `/profile`, `/quizzes`, `/activities`, `/leaderboard` |
-| Editor | `section_editor` | `/editor`, `/editor/uploads`, `/editor/uploads/:id`, `/editor/upload[?id=]` |
+| Editor | `section_editor`, `admin` | `/editor`, `/editor/uploads`, `/editor/uploads/:id`, `/editor/upload[?id=]` |
 | Review | `content_manager`, `admin` | `/review`, `/review/history`, `/review/:id` |
 | Admin | `admin` | `/admin`, `/admin/content`, `/admin/team`, `/admin/students`, `/admin/activities`, `/admin/quizzes`, `/admin/leaderboards`, `/admin/audit` (`/admin/review` → `/review`) |
 
-Assumptions to confirm: admins **can** review/publish; admins are **not**
-implicitly section editors (they need the role + a scope to upload); the
+Confirmed by backend Phase 1: admins review/publish AND may upload for any
+subject, group and section without the editor role or a scope; the
 `admin` role is never granted from the UI.
 
 ## Workflow

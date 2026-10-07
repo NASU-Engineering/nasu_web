@@ -7,7 +7,7 @@ import { icons } from '../../ui/icons.js';
 import { CONFIG } from '../../config.js';
 import { api } from '../../services/api.js';
 import { SUBJECTS, subjectById } from '../../data/catalog.js';
-import { scopeOptions } from '../../services/roles.js';
+import { scopeOptions, uploadScopes } from '../../services/roles.js';
 import { CONTENT_TYPES, MAX_WEEK, isEditable, validateSubmission, formatBytes } from '../../services/content-workflow.js';
 import { consoleShell } from '../../ui/console.js';
 import { statusBadge, reviewNoteBox, fileLabel } from '../../ui/workflow.js';
@@ -26,7 +26,7 @@ export default async function editorUpload({ access, path, query, navigate }) {
     editingId ? api.editor.get(editingId) : null,
     api.catalog.listGroups().catch(() => []), // wildcard scopes just show "All …" without it
   ]);
-  const opts = scopeOptions(access.scopes, groups);
+  const opts = scopeOptions(uploadScopes(access, SUBJECTS.map(s => s.id)), groups);
   const shell = body => consoleShell({
     access, path, eyebrow: 'EDITOR WORKSPACE',
     title: existing ? 'Edit upload' : 'Upload content',
@@ -132,8 +132,7 @@ export default async function editorUpload({ access, path, query, navigate }) {
       const fileInput = root.querySelector('#fFile');
       const drop = root.querySelector('#drop');
       const progress = root.querySelector('#progress');
-      let chosen = null;          // File picked in this visit
-      let uploaded = null;        // { forFile, result } — avoid re-uploading on retry
+      let chosen = null;          // File picked in this visit (cleared once it's attached)
       let savedId = existing?.id || null;
       let busy = false;
 
@@ -204,13 +203,15 @@ export default async function editorUpload({ access, path, query, navigate }) {
       };
 
       async function save(values) {
-        let file = null;
-        if (chosen) {
-          if (uploaded?.forFile !== chosen) uploaded = { forFile: chosen, result: await api.editor.uploadFile(chosen, { onProgress }) };
-          file = uploaded.result;
+        // Backend flow (in the adapter): save draft → upload file → save with storage path.
+        let item;
+        try {
+          item = await api.editor.saveDraft({ id: savedId, values, file: chosen, onProgress });
+        } catch (err) {
+          if (err.contentItemId) savedId = err.contentItemId; // draft was created before the upload failed
+          throw err;
         }
-        const item = await api.editor.saveDraft({ id: savedId, values, file });
-        savedId = item.id;
+        savedId = item.id || savedId;
         chosen = null;
         return item;
       }

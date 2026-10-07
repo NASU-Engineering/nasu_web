@@ -19,7 +19,7 @@ test('workspaces per role combination', () => {
   assert.deepEqual(ids(['student']), []);
   assert.deepEqual(ids(['student', 'section_editor']), ['editor']);
   assert.deepEqual(ids(['content_manager']), ['review']);
-  assert.deepEqual(ids(['student', 'admin']), ['review', 'admin'], 'admins review too');
+  assert.deepEqual(ids(['student', 'admin']), ['editor', 'review', 'admin'], 'admins upload (no scope needed) and review too');
   assert.deepEqual(ids(['section_editor', 'content_manager', 'admin']), ['editor', 'review', 'admin']);
   assert.equal(isStaff(['student']), false);
   assert.equal(isStaff(['section_editor']), true);

@@ -29,7 +29,7 @@ test('normalizeContentItem maps the proposed row shape and defends against bad v
   assert.equal(it.group, null);
   assert.equal(it.status, 'rejected');
   assert.equal(it.reviewNote, 'Fix page 2');
-  assert.deepEqual(it.file, { name: 'a.pdf', size: 10, mimeType: '' });
+  assert.deepEqual(it.file, { name: 'a.pdf', size: 10, mimeType: '', storagePath: null });
   assert.deepEqual(it.submitter, { id: 'u1', fullName: 'A B', studentId: '2025' });
   const odd = normalizeContentItem({ id: 'x', status: 'hacked', content_type: '<script>', week: 'abc' });
   assert.equal(odd.status, 'draft');
@@ -63,7 +63,7 @@ test('audit entries, members, stats, groups, pages', () => {
   assert.deepEqual(normalizePage([{ id: 1 }], normalizeAuditEntry).nextCursor, null);
 });
 
-test('api.access fails closed while the backend has no roles API', async () => {
+test('api.access fails closed when roles can’t be loaded', async () => {
   // Minimal browser globals for importing the service layer under Node.
   globalThis.location ??= { href: 'http://example.test/', hostname: 'example.test', origin: 'http://example.test', pathname: '/', search: '', hash: '' };
   globalThis.sessionStorage ??= { getItem: () => null, setItem() {}, removeItem() {} };
@@ -72,12 +72,14 @@ test('api.access fails closed while the backend has no roles API', async () => {
   assert.equal(isDemoMode, false, 'shipped config must use the real backend');
   assert.equal(api.dev, null, 'demo role switcher must not exist outside the mock backend');
   assert.deepEqual(await api.access.getMine(null), NO_ACCESS);
-  const access = await api.access.getMine({ email: '2025@nasu.edu.eg' });
-  assert.deepEqual(access.roles, []);
-  assert.equal(access.available, false);
+  // Under Node the Supabase client can't load: access errors instead of granting roles
+  // (the router then shows an error on staff routes and the plain student hub elsewhere).
+  await assert.rejects(api.access.getMine({ email: '2025@nasu.edu.eg' }), err => err.code === 'network');
 
-  // Privileged calls surface 'backend_required' rather than pretending to succeed.
+  // Privileged calls never pretend to succeed without a backend.
   for (const call of [() => api.admin.grantRole('u', 'section_editor'), () => api.review.approve('c1'), () => api.editor.listMine()]) {
-    await assert.rejects(call, err => err.code === 'backend_required');
+    await assert.rejects(call, err => ['network', 'backend_required'].includes(err.code));
   }
+  // 'admin' is refused before any request is made.
+  await assert.rejects(api.admin.grantRole('u', 'admin'), err => err.code === 'forbidden');
 });

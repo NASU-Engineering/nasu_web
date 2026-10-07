@@ -75,7 +75,9 @@ const item = raw => {
   if (!out) throw toApiError(new Error('empty content row'), 'content');
   return out;
 };
-const items = rows => (Array.isArray(rows) ? rows : []).map(normalizeContentItem).filter(Boolean);
+const items = rows => (Array.isArray(rows) ? rows : rows?.items || []).map(normalizeContentItem).filter(Boolean);
+// Actions whose response may not include the full row: callers reload afterwards.
+const itemOrNull = raw => normalizeContentItem(raw);
 backend.onAuthChange?.(emitAuthChange);
 
 /* ---------- OAuth redirect handling ---------- */
@@ -175,10 +177,13 @@ export const api = {
   editor: {
     listMine: wrap('editor', async ({ status = '' } = {}) => items(await backend.listMyContent({ status: status || undefined }))),
     get: wrap('editor', async id => item(await backend.getContentItem(id))),
-    /** Upload the file first (uploadFile), then pass its result as `file`. Creates when no id. */
-    saveDraft: wrap('editor', async ({ id = null, values, file = null }) => item(await backend.saveContentDraft({ id, values, file }))),
-    uploadFile: wrap('upload', (file, { onProgress } = {}) => backend.uploadContentFile(file, { onProgress })),
-    submit: wrap('editor', async id => item(await backend.submitContentForReview(id))),
+    /**
+     * Creates (no id) or updates a draft. With a `file` (File), the backend flow runs:
+     * save draft → upload to Storage → save again with the storage path. Returns the item.
+     */
+    saveDraft: wrap('editor', async ({ id = null, values, file = null, onProgress }) =>
+      item(await backend.saveContentDraft({ id, values, file, onProgress }))),
+    submit: wrap('editor', async id => itemOrNull(await backend.submitContentForReview(id))),
   },
 
   review: {
@@ -186,28 +191,42 @@ export const api = {
     listQueue: wrap('review', async ({ status = 'pending_review', cursor = null, limit } = {}) =>
       normalizePage(await backend.listReviewQueue({ status, cursor, limit }), normalizeContentItem)),
     get: wrap('review', async id => item(await backend.getContentItem(id))),
-    /** Short-lived URL for previewing/downloading the submitted file. */
-    getFileUrl: wrap('review', async id => {
-      const { url } = (await backend.getContentFileUrl(id)) || {};
+    /** Short-lived signed URL for previewing/downloading an item's file (https only). */
+    getFileUrl: wrap('review', async contentItem => {
+      const { url } = (await backend.getContentFileUrl({ id: contentItem.id, storagePath: contentItem.file?.storagePath || null })) || {};
       const safe = safeUrl(url);
-      if (!safe) throw new ApiError('preview_unavailable');
+      if (!safe || !safe.startsWith('https:')) throw new ApiError('preview_unavailable');
       return safe;
     }),
-    approve: wrap('review', async (id, { note = '' } = {}) => item(await backend.decideContent(id, { decision: 'approve', note }))),
-    reject: wrap('review', async (id, { reason }) => item(await backend.decideContent(id, { decision: 'reject', note: reason }))),
-    publish: wrap('review', async id => item(await backend.publishContent(id))),
+    approve: wrap('review', async (id, { note = '' } = {}) => itemOrNull(await backend.decideContent(id, { decision: 'approve', note }))),
+    reject: wrap('review', async (id, { reason }) => itemOrNull(await backend.decideContent(id, { decision: 'reject', note: reason }))),
+    publish: wrap('review', async id => itemOrNull(await backend.publishContent(id))),
   },
 
   admin: {
     getStats: wrap('admin', async () => normalizeStats(await backend.getAdminStats())),
-    listContent: wrap('admin', async (filters = {}) => normalizePage(await backend.listAllContent(filters), normalizeContentItem)),
-    searchMembers: wrap('admin', async ({ query = '', role = '', cursor = null } = {}) =>
-      normalizePage(await backend.searchMembers({ query: query.trim(), role: role || undefined, cursor }), normalizeMember)),
+    // The RPCs filter by status / search text only; subject, text-in-content, role
+    // and audit-action filters are applied here to the rows returned (current page).
+    listContent: wrap('admin', async ({ status = '', subjectId = '', query = '', cursor = null } = {}) => {
+      const page = normalizePage(await backend.listAllContent({ status, subjectId, query, cursor }), normalizeContentItem);
+      const q = query.trim().toLowerCase();
+      page.items = page.items.filter(i => (!subjectId || i.subjectId === subjectId)
+        && (!q || i.title.toLowerCase().includes(q) || (i.submitter?.fullName || '').toLowerCase().includes(q)));
+      return page;
+    }),
+    searchMembers: wrap('admin', async ({ query = '', role = '', cursor = null } = {}) => {
+      const page = normalizePage(await backend.searchMembers({ query: query.trim(), role: role || undefined, cursor }), normalizeMember);
+      if (role) page.items = page.items.filter(m => m.roles.includes(role));
+      return page;
+    }),
     grantRole: wrap('admin', async (userId, role) => normalizeMember(await backend.grantRole(userId, role))),
     revokeRole: wrap('admin', async (userId, role) => normalizeMember(await backend.revokeRole(userId, role))),
     setEditorScopes: wrap('admin', async (userId, scopes) => normalizeMember(await backend.setEditorScopes(userId, scopes))),
-    listAuditLog: wrap('admin', async ({ cursor = null, action = '', limit } = {}) =>
-      normalizePage(await backend.listAuditLog({ cursor, action: action || undefined, limit }), normalizeAuditEntry)),
+    listAuditLog: wrap('admin', async ({ cursor = null, action = '', limit } = {}) => {
+      const page = normalizePage(await backend.listAuditLog({ cursor, action: action || undefined, limit }), normalizeAuditEntry);
+      if (action) page.items = page.items.filter(e => e.action.startsWith(action));
+      return page;
+    }),
   },
 
   // DEV ONLY (mock backend): lets reviewers preview each role's UI. Absent in production.

@@ -53,8 +53,31 @@ test('sign-in uses Supabase OAuth with the Azure provider only', () => {
 });
 
 test('profile is only fetched via get_my_profile with no arguments', () => {
-  const calls = shipped.flatMap(f => f.text.match(/\.rpc\([^)]*\)/g) || []);
+  const calls = shipped.flatMap(f => f.text.match(/\.rpc\('get_my_profile'[^)]*\)/g) || []);
   assert.deepEqual(calls, [".rpc('get_my_profile')"]);
+});
+
+// The complete set of RPCs the browser may call. Adding one is a deliberate, reviewed change.
+const ALLOWED_RPCS = [
+  'get_my_profile', 'get_my_access', 'list_groups', 'list_my_content', 'get_content_item',
+  'save_content_draft', 'submit_content_for_review', 'list_review_queue', 'review_content',
+  'publish_content', 'get_admin_stats', 'admin_list_content', 'admin_search_members',
+  'admin_grant_role', 'admin_revoke_role', 'admin_set_editor_scopes', 'admin_list_audit_log',
+].sort();
+
+test('RPC calls only go through allowlisted names', () => {
+  // Call sites: the literal get_my_profile call, and the workspace adapter's single rpc() helper.
+  const sites = shipped.flatMap(f => (f.text.match(/\.rpc\([^)]*\)/g) || []).map(c => `${f.path.split(/[\\/]/).pop()}:${c}`));
+  assert.deepEqual(sites.sort(), [
+    "supabase-backend.js:.rpc('get_my_profile')",
+    'supabase-workspace.js:.rpc(name)',
+    'supabase-workspace.js:.rpc(name, args)',
+  ]);
+  const ws = shipped.find(f => f.path.endsWith('supabase-workspace.js')).text;
+  const block = ws.match(/export const RPC = \{([\s\S]*?)\};/)[1];
+  const names = [...block.matchAll(/:\s*'([a-z_]+)'/g)].map(m => m[1]);
+  assert.deepEqual(['get_my_profile', ...names].sort(), ALLOWED_RPCS);
+  assert.doesNotMatch(ws, /\.rpc\(\s*['"`]/, 'workspace RPCs are called only via the RPC map');
 });
 
 test('shipped config uses the real backend, not the dev mock', () => {
@@ -74,7 +97,22 @@ test('every staff route is role-guarded in the router', () => {
   for (const line of staff) assert.match(line, /roles:\s*(EDITOR|REVIEWER|ADMIN)|redirect:/, line.trim());
 });
 
-test('workspace backend calls are not wired to guessed tables or RPCs', () => {
+test('Storage: private content-files bucket, no overwrite, short signed URLs, no public URLs', () => {
   const ws = shipped.find(f => f.path.endsWith('supabase-workspace.js')).text;
-  assert.doesNotMatch(ws, /\.rpc\(|\.from\(|\.storage\b/, 'connect only once the backend contract is agreed');
+  noMatch(/getPublicUrl|\/object\/public\//, 'the content bucket is private — never public URLs');
+  noMatch(/upsert:\s*true/, 'uploads must never overwrite an existing object');
+  assert.match(ws, /export const BUCKET = 'content-files';/);
+  const storageFroms = shipped.flatMap(f => f.text.match(/storage\.from\([^)]*\)/g) || []);
+  assert.ok(storageFroms.length > 0 && storageFroms.every(c => c === 'storage.from(BUCKET)'), `unexpected bucket use: ${storageFroms}`);
+  assert.match(ws, /upsert:\s*false/);
+  const secs = Number(ws.match(/SIGNED_URL_SECONDS = (\d+)/)?.[1]);
+  assert.ok(secs > 0 && secs <= 300, 'signed URLs must be short-lived');
+  // no table access other than Storage
+  for (const f of shipped) assert.doesNotMatch(f.text.replace(/storage\.from\(BUCKET\)/g, ''), /(?<!Array)\.from\(/, f.path);
+});
+
+test('browser never writes audit rows and never grants the admin role', async () => {
+  noMatch(/audit_logs/, 'audit entries are server-generated');
+  const { ASSIGNABLE_ROLES } = await import('../assets/js/services/roles.js');
+  assert.deepEqual([...ASSIGNABLE_ROLES].sort(), ['content_manager', 'section_editor']);
 });
