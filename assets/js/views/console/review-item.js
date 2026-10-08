@@ -13,6 +13,10 @@ export default async function reviewItem({ access, path, params, reload }) {
   const item = await api.review.get(params.id);
   const decide = canDecide(item.status);
   const publish = canPublish(item.status);
+  // Opened from the Admin Control Center (/admin/content/:id) it stays in that shell.
+  const inAdmin = path.startsWith('/admin');
+  const back = inAdmin ? { href: '/admin/content', label: 'Content' }
+    : decide ? { href: '/review', label: 'Review queue' } : { href: '/review/processed', label: 'Processed' };
 
   const decisionPanel = decide ? panel('Decision', html`
     <div class="field field-dark">
@@ -33,10 +37,10 @@ export default async function reviewItem({ access, path, params, reload }) {
     title: `Review: ${item.title}`,
     html: consoleShell({
       access, path,
-      eyebrow: 'REVIEW',
+      eyebrow: inAdmin ? 'ADMIN CONTROL CENTER' : 'REVIEW DESK',
       title: item.title,
       body: html`
-        <a class="back-link" href="#${decide ? '/review' : '/review/history'}">${icons.back}<span>${decide ? 'Review queue' : 'Processed'}</span></a>
+        <a class="back-link" href="#${back.href}">${icons.back}<span>${back.label}</span></a>
         <div class="item-status">${statusBadge(item.status)}${statusTrack(item.status)}</div>
         ${reviewNoteBox(item)}
         <div class="console-cols">

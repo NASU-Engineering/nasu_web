@@ -18,10 +18,10 @@ export function scopesList(scopes) {
 
 export default async function editorOverview({ access, path }) {
   return {
-    title: 'Editor workspace',
+    title: 'Content Studio',
     html: consoleShell({
       access, path,
-      eyebrow: 'EDITOR WORKSPACE',
+      eyebrow: 'CONTENT STUDIO',
       title: 'Overview',
       lead: 'Upload material for your sections. Everything you submit is checked by a content manager before students see it.',
       actions: html`<a class="btn btn-primary" href="#/editor/upload">${icons.plus}<span>Upload content</span></a>`,
@@ -33,7 +33,7 @@ export default async function editorOverview({ access, path }) {
             ? html`<p class="muted">As an admin you can upload for every subject, group and section.</p>`
             : scopesList(access.scopes))}
         </div>
-        ${panel('Recent uploads', html`<div id="edRecent"></div>`, { action: html`<a class="see-all" href="#/editor/uploads">All uploads</a>` })}`,
+        ${panel('Recent uploads', html`<div id="edRecent"></div>`, { action: html`<a class="see-all" href="#/editor/uploads">My content</a>` })}`,
     }),
     bind(root) {
       const mine = api.editor.listMine();

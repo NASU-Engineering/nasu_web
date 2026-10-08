@@ -2,8 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  normalizeRoles, hasRole, workspacesFor, isStaff, primaryWorkspace, routeAllowed,
-  consoleNav, activeConsoleHref, inScope, scopeOptions, scopeLabel,
+  normalizeRoles, hasRole, routeAllowed, inScope, scopeOptions, scopeLabel, uploadScopes,
 } from '../assets/js/services/roles.js';
 
 test('normalizeRoles keeps only known roles, de-duplicated, in a stable order', () => {
@@ -11,20 +10,6 @@ test('normalizeRoles keeps only known roles, de-duplicated, in a stable order', 
   assert.deepEqual(normalizeRoles([{ role: 'content_manager' }, { role: 'section_editor' }]), ['section_editor', 'content_manager']);
   assert.deepEqual(normalizeRoles(undefined), []);
   assert.deepEqual(normalizeRoles('admin'), [], 'a bare string is not a role list');
-});
-
-test('workspaces per role combination', () => {
-  const ids = roles => workspacesFor(roles).map(w => w.id);
-  assert.deepEqual(ids([]), []);
-  assert.deepEqual(ids(['student']), []);
-  assert.deepEqual(ids(['student', 'section_editor']), ['editor']);
-  assert.deepEqual(ids(['content_manager']), ['review']);
-  assert.deepEqual(ids(['student', 'admin']), ['editor', 'review', 'admin'], 'admins upload (no scope needed) and review too');
-  assert.deepEqual(ids(['section_editor', 'content_manager', 'admin']), ['editor', 'review', 'admin']);
-  assert.equal(isStaff(['student']), false);
-  assert.equal(isStaff(['section_editor']), true);
-  assert.equal(primaryWorkspace(['student', 'admin']).id, 'admin');
-  assert.equal(primaryWorkspace(['student']), null);
 });
 
 test('route guard (UX): open routes, role routes, unknown roles', () => {
@@ -38,17 +23,7 @@ test('route guard (UX): open routes, role routes, unknown roles', () => {
   assert.equal(hasRole(null, 'admin'), false);
 });
 
-test('console nav lists only the groups the user has; active item is the longest prefix', () => {
-  assert.deepEqual(consoleNav(['student']), []);
-  const nav = consoleNav(['section_editor', 'admin']);
-  assert.deepEqual(nav.map(g => g.id), ['editor', 'review', 'admin']);
-  assert.equal(activeConsoleHref(nav, '/editor/uploads/c1'), '/editor/uploads');
-  assert.equal(activeConsoleHref(nav, '/editor/upload'), '/editor/upload');
-  assert.equal(activeConsoleHref(nav, '/admin'), '/admin');
-  assert.equal(activeConsoleHref(nav, '/admin/team'), '/admin/team');
-  assert.equal(activeConsoleHref(nav, '/review/c9'), '/review');
-  assert.equal(activeConsoleHref(nav, '/dashboard'), null);
-});
+// Experiences and per-experience navigation: tests/experiences.test.mjs
 
 const scopes = [
   { subjectId: 'math1', group: 'G1', section: 'S1' },
@@ -85,4 +60,9 @@ test('scopeOptions limits the upload form to the editor’s scope', () => {
     assert.ok(inScope(scopes, { subjectId: s, group: g.value, section: sec.value }), `${s}/${g.value}/${sec.value}`);
   }
   assert.equal(scopeLabel({ group: null, section: null }), 'All groups · All sections');
+  // admins upload anywhere; editors only within their scopes; students nowhere
+  assert.deepEqual(uploadScopes({ roles: ['student', 'admin'], scopes: [] }, ['math1', 'stat']),
+    [{ subjectId: 'math1', group: null, section: null }, { subjectId: 'stat', group: null, section: null }]);
+  assert.deepEqual(uploadScopes({ roles: ['section_editor'], scopes }, ['math1']), scopes);
+  assert.deepEqual(uploadScopes({ roles: ['student'], scopes }, ['math1']), []);
 });

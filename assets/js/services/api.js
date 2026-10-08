@@ -18,10 +18,17 @@ import {
 } from './normalize-workspace.js';
 import * as mockBackend from './mock-backend.js';
 import * as supabaseBackend from './supabase-backend.js';
+import {
+  PERSONAS, canUseSimulator, personaSession, currentSimulation, isSimulating, startSimulation, stopSimulation,
+} from './simulator.js';
 
-const backend = CONFIG.backend === 'mock' ? mockBackend : supabaseBackend;
+const realBackend = CONFIG.backend === 'mock' ? mockBackend : supabaseBackend;
 
-export const isDemoMode = backend === mockBackend;
+// While the role simulator runs, EVERY call goes to the isolated mock backend —
+// no request reaches Supabase and the real session is left untouched.
+const be = () => (isSimulating() ? mockBackend : realBackend);
+
+export const isDemoMode = realBackend === mockBackend;
 // Real auth, sample course content (CONFIG.contentSource = 'mock').
 export const usesSampleContent = !isDemoMode && CONFIG.contentSource !== 'supabase';
 
@@ -51,7 +58,8 @@ export const NO_ACCESS = Object.freeze({ roles: [], scopes: [], available: false
 
 async function loadAccess() {
   try {
-    return normalizeAccess(await backend.getMyAccess());
+    const access = normalizeAccess(await be().getMyAccess());
+    return isSimulating() ? { ...access, simulated: true } : access;
   } catch (err) {
     const e = toApiError(err, 'access');
     if (e.code === 'backend_required') return NO_ACCESS;
@@ -78,7 +86,7 @@ const item = raw => {
 const items = rows => (Array.isArray(rows) ? rows : rows?.items || []).map(normalizeContentItem).filter(Boolean);
 // Actions whose response may not include the full row: callers reload afterwards.
 const itemOrNull = raw => normalizeContentItem(raw);
-backend.onAuthChange?.(emitAuthChange);
+realBackend.onAuthChange?.(emitAuthChange);
 
 /* ---------- OAuth redirect handling ---------- */
 
@@ -107,7 +115,7 @@ function takeNext() {
 
 export const api = {
   auth: {
-    getSession: wrap('session', () => backend.getSession()),
+    getSession: wrap('session', () => be().getSession()),
 
     /** Sends the browser to NASU Microsoft sign-in. `next` = in-app route to return to. */
     startSignIn: wrap('sign-in', async ({ next } = {}) => {
@@ -115,7 +123,7 @@ export const api = {
         if (next) sessionStorage.setItem(NEXT_KEY, next);
         else sessionStorage.removeItem(NEXT_KEY);
       } catch { /* returning to the dashboard is fine */ }
-      await backend.startSignIn({ redirectTo: returnUrl() });
+      await realBackend.startSignIn({ redirectTo: returnUrl() });
     }),
 
     /** True when this page load is the return from Microsoft sign-in. */
@@ -130,13 +138,14 @@ export const api = {
       const params = readOAuthReturn();
       history.replaceState(null, '', returnUrl() + '#/');
       const next = takeNext();
-      await backend.completeSignIn(params);
+      await realBackend.completeSignIn(params);
       emitAuthChange('signed_in');
       return { next };
     }),
 
     signOut: wrap('sign-out', async () => {
-      await backend.signOut();
+      if (isSimulating()) exitSimulation(); // signing out always leaves the simulator first
+      await realBackend.signOut();
       emitAuthChange('signed_out');
     }),
 
@@ -144,23 +153,23 @@ export const api = {
   },
 
   profile: {
-    getMine: wrap('profile', () => backend.getMyProfile()),
+    getMine: wrap('profile', () => be().getMyProfile()),
   },
 
   subjects: {
-    list: wrap('subjects', () => backend.listSubjects()),
-    get: wrap('subjects', id => backend.getSubject(id)),
+    list: wrap('subjects', () => be().listSubjects()),
+    get: wrap('subjects', id => be().getSubject(id)),
   },
 
   resources: {
-    listBySubject: wrap('resources', subjectId => backend.listResources({ subjectId })),
-    recent: wrap('resources', (limit = 5) => backend.listResources({ limit })),
+    listBySubject: wrap('resources', subjectId => be().listResources({ subjectId })),
+    recent: wrap('resources', (limit = 5) => be().listResources({ limit })),
     search: wrap('resources', ({ query = '', subjectId = '', category = '' } = {}) =>
-      backend.searchResources({ query: query.trim(), subjectId, category })),
+      be().searchResources({ query: query.trim(), subjectId, category })),
   },
 
   announcements: {
-    list: wrap('announcements', ({ subjectId = '', limit } = {}) => backend.listAnnouncements({ subjectId, limit })),
+    list: wrap('announcements', ({ subjectId = '', limit } = {}) => be().listAnnouncements({ subjectId, limit })),
   },
 
   /* ----- staff workspaces. Every call is authorised by the backend; the UI only hides what it can't use. ----- */
@@ -171,67 +180,96 @@ export const api = {
   },
 
   catalog: {
-    listGroups: wrap('groups', async () => normalizeGroups(await backend.listGroups())),
+    listGroups: wrap('groups', async () => normalizeGroups(await be().listGroups())),
   },
 
   editor: {
-    listMine: wrap('editor', async ({ status = '' } = {}) => items(await backend.listMyContent({ status: status || undefined }))),
-    get: wrap('editor', async id => item(await backend.getContentItem(id))),
+    listMine: wrap('editor', async ({ status = '' } = {}) => items(await be().listMyContent({ status: status || undefined }))),
+    get: wrap('editor', async id => item(await be().getContentItem(id))),
     /**
      * Creates (no id) or updates a draft. With a `file` (File), the backend flow runs:
      * save draft → upload to Storage → save again with the storage path. Returns the item.
      */
     saveDraft: wrap('editor', async ({ id = null, values, file = null, onProgress }) =>
-      item(await backend.saveContentDraft({ id, values, file, onProgress }))),
-    submit: wrap('editor', async id => itemOrNull(await backend.submitContentForReview(id))),
+      item(await be().saveContentDraft({ id, values, file, onProgress }))),
+    submit: wrap('editor', async id => itemOrNull(await be().submitContentForReview(id))),
   },
 
   review: {
     /** status: 'pending_review' | 'processed' → { items, nextCursor } */
     listQueue: wrap('review', async ({ status = 'pending_review', cursor = null, limit } = {}) =>
-      normalizePage(await backend.listReviewQueue({ status, cursor, limit }), normalizeContentItem)),
-    get: wrap('review', async id => item(await backend.getContentItem(id))),
+      normalizePage(await be().listReviewQueue({ status, cursor, limit }), normalizeContentItem)),
+    get: wrap('review', async id => item(await be().getContentItem(id))),
     /** Short-lived signed URL for previewing/downloading an item's file (https only). */
     getFileUrl: wrap('review', async contentItem => {
-      const { url } = (await backend.getContentFileUrl({ id: contentItem.id, storagePath: contentItem.file?.storagePath || null })) || {};
+      const { url } = (await be().getContentFileUrl({ id: contentItem.id, storagePath: contentItem.file?.storagePath || null })) || {};
       const safe = safeUrl(url);
       if (!safe || !safe.startsWith('https:')) throw new ApiError('preview_unavailable');
       return safe;
     }),
-    approve: wrap('review', async (id, { note = '' } = {}) => itemOrNull(await backend.decideContent(id, { decision: 'approve', note }))),
-    reject: wrap('review', async (id, { reason }) => itemOrNull(await backend.decideContent(id, { decision: 'reject', note: reason }))),
-    publish: wrap('review', async id => itemOrNull(await backend.publishContent(id))),
+    approve: wrap('review', async (id, { note = '' } = {}) => itemOrNull(await be().decideContent(id, { decision: 'approve', note }))),
+    reject: wrap('review', async (id, { reason }) => itemOrNull(await be().decideContent(id, { decision: 'reject', note: reason }))),
+    publish: wrap('review', async id => itemOrNull(await be().publishContent(id))),
   },
 
   admin: {
-    getStats: wrap('admin', async () => normalizeStats(await backend.getAdminStats())),
+    getStats: wrap('admin', async () => normalizeStats(await be().getAdminStats())),
     // The RPCs filter by status / search text only; subject, text-in-content, role
     // and audit-action filters are applied here to the rows returned (current page).
     listContent: wrap('admin', async ({ status = '', subjectId = '', query = '', cursor = null } = {}) => {
-      const page = normalizePage(await backend.listAllContent({ status, subjectId, query, cursor }), normalizeContentItem);
+      const page = normalizePage(await be().listAllContent({ status, subjectId, query, cursor }), normalizeContentItem);
       const q = query.trim().toLowerCase();
       page.items = page.items.filter(i => (!subjectId || i.subjectId === subjectId)
         && (!q || i.title.toLowerCase().includes(q) || (i.submitter?.fullName || '').toLowerCase().includes(q)));
       return page;
     }),
     searchMembers: wrap('admin', async ({ query = '', role = '', cursor = null } = {}) => {
-      const page = normalizePage(await backend.searchMembers({ query: query.trim(), role: role || undefined, cursor }), normalizeMember);
+      const page = normalizePage(await be().searchMembers({ query: query.trim(), role: role || undefined, cursor }), normalizeMember);
       if (role) page.items = page.items.filter(m => m.roles.includes(role));
       return page;
     }),
-    grantRole: wrap('admin', async (userId, role) => normalizeMember(await backend.grantRole(userId, role))),
-    revokeRole: wrap('admin', async (userId, role) => normalizeMember(await backend.revokeRole(userId, role))),
-    setEditorScopes: wrap('admin', async (userId, scopes) => normalizeMember(await backend.setEditorScopes(userId, scopes))),
+    grantRole: wrap('admin', async (userId, role) => normalizeMember(await be().grantRole(userId, role))),
+    revokeRole: wrap('admin', async (userId, role) => normalizeMember(await be().revokeRole(userId, role))),
+    setEditorScopes: wrap('admin', async (userId, scopes) => normalizeMember(await be().setEditorScopes(userId, scopes))),
     listAuditLog: wrap('admin', async ({ cursor = null, action = '', limit } = {}) => {
-      const page = normalizePage(await backend.listAuditLog({ cursor, action: action || undefined, limit }), normalizeAuditEntry);
+      const page = normalizePage(await be().listAuditLog({ cursor, action: action || undefined, limit }), normalizeAuditEntry);
       if (action) page.items = page.items.filter(e => e.action.startsWith(action));
       return page;
     }),
   },
 
-  // DEV ONLY (mock backend): lets reviewers preview each role's UI. Absent in production.
-  dev: isDemoMode ? {
-    getDemoRoles: () => backend.getDemoRoles(),
-    setDemoRoles: async roles => { await backend.setDemoRoles(roles); accessCache = null; },
-  } : null,
+  /* ----- role experience simulator (admin testing tool, mock data only) ----- */
+
+  sim: {
+    /** UX gate: the real account must be an admin according to the backend. */
+    available: access => canUseSimulator(access, CONFIG),
+    /** The active persona, or null. */
+    current: () => PERSONAS[currentSimulation()?.personaId] || null,
+    /**
+     * Starts (or switches) a simulation. Entering needs the REAL access the backend
+     * reported (passed in by the caller, never a simulated one); switching persona
+     * inside a running simulation is allowed.
+     */
+    enter: wrap('simulator', async (personaId, realAccess) => {
+      if (!PERSONAS[personaId]) throw new ApiError('invalid', personaId);
+      if (!isSimulating() && !canUseSimulator(realAccess, CONFIG)) throw new ApiError('forbidden', 'simulator requires admin');
+      const restore = isSimulating() ? null : { session: mockBackend.mockSessionSnapshot(), roles: mockBackend.mockRolesSnapshot() };
+      startSimulation(personaId, restore);
+      mockBackend.setMockSession(personaSession(personaId, CONFIG.auth.emailDomain));
+      await mockBackend.setDemoRoles(PERSONAS[personaId].roles.filter(r => r !== 'student'));
+      accessCache = null;
+    }),
+    exit: () => exitSimulation(),
+    /** Resets the simulator's own sample data (mock workspace only). */
+    reset: () => { mockBackend.resetMockWorkspace(); },
+  },
 };
+
+function exitSimulation() {
+  const restore = stopSimulation();
+  if (restore) {
+    mockBackend.restoreMockSession(restore.session);
+    mockBackend.restoreMockRoles(restore.roles);
+  }
+  accessCache = null;
+}

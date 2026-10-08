@@ -15,7 +15,7 @@ export default async function landing({ session }) {
         <p class="hero-lead">The NASU Engineering Freshmen Hub collects course material for all six prep-year subjects, plus announcements from your course teams.</p>
         <div class="hero-cta">
           ${session
-            ? html`<a class="btn btn-primary btn-lg" href="#/dashboard">Open your dashboard</a>`
+            ? html`<a class="btn btn-primary btn-lg" href="#/start">Open the Hub</a>`
             : html`
               <div class="hero-signin">${microsoftButton('heroSignIn')}${formError('heroSignInError')}</div>`}
         </div>

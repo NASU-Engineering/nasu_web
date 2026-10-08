@@ -23,7 +23,8 @@ const store = {
 const delay = (ms = 250) => new Promise(r => setTimeout(r, ms));
 const now = () => new Date().toISOString();
 const daysAgo = n => new Date(Date.now() - n * 864e5).toISOString();
-const ME = 'mock-user-0';
+const ME = 'mock-user-0'; // default mock user; a simulator persona sets session.userId
+const currentId = () => store.get(SESSION_KEY)?.userId || ME;
 
 /* ---------- demo roles (dev only) ---------- */
 
@@ -34,6 +35,12 @@ export function getDemoRoles() {
 }
 export async function setDemoRoles(roles) {
   store.set(ROLES_KEY, normalizeRoles(['student', ...roles]));
+}
+// Raw stored value (null = defaults), so the simulator can put it back on exit.
+export const mockRolesSnapshot = () => store.get(ROLES_KEY);
+export function restoreMockRoles(raw) {
+  if (raw == null) { try { sessionStorage.removeItem(ROLES_KEY); } catch { /* ignore */ } memory.delete(ROLES_KEY); }
+  else store.set(ROLES_KEY, raw);
 }
 
 /* ---------- fake database ---------- */
@@ -95,17 +102,17 @@ const save = d => store.set(DB_KEY, d);
 
 function caller() {
   if (!store.get(SESSION_KEY)) throw new ApiError('unauthenticated');
-  return { id: ME, roles: getDemoRoles() };
+  return { id: currentId(), roles: getDemoRoles() };
 }
 function requireRole(...roles) {
   const me = caller();
   if (!roles.some(r => me.roles.includes(r))) throw new ApiError('forbidden', `mock: needs ${roles.join(' or ')}`);
   return me;
 }
-const myScopes = d => (d.scopes[ME] || []).map(normalizeScope);
+const myScopes = d => (d.scopes[currentId()] || []).map(normalizeScope);
 const person = (d, id) => { const p = d.people.find(x => x.user_id === id); return p && { id, full_name: p.full_name, student_id: p.student_id }; };
 function log(d, action, entityType, entityId, metadata = {}) {
-  d.audit.unshift({ id: `l${++d.seq}`, actor: person(d, ME), action, entity_type: entityType, entity_id: entityId, created_at: now(), metadata });
+  d.audit.unshift({ id: `l${++d.seq}`, actor: person(d, currentId()), action, entity_type: entityType, entity_id: entityId, created_at: now(), metadata });
 }
 function page(list, { cursor, limit = 20 } = {}) {
   const start = Number(cursor) || 0;
@@ -113,7 +120,7 @@ function page(list, { cursor, limit = 20 } = {}) {
   return { items, next_cursor: start + limit < list.length ? String(start + limit) : null };
 }
 const newest = key => (a, b) => (b[key] || b.created_at || '').localeCompare(a[key] || a.created_at || '');
-const memberRow = (d, p) => ({ ...p, roles: ['student', ...(p.user_id === ME ? getDemoRoles() : d.roles[p.user_id] || [])], scopes: d.scopes[p.user_id] || [] });
+const memberRow = (d, p) => ({ ...p, roles: ['student', ...(p.user_id === currentId() ? getDemoRoles() : d.roles[p.user_id] || [])], scopes: d.scopes[p.user_id] || [] });
 
 /* ---------- access ---------- */
 
@@ -121,7 +128,7 @@ export async function getMyAccess() {
   await delay(150);
   const me = caller();
   const d = db();
-  return { roles: me.roles, scopes: me.roles.includes('section_editor') ? d.scopes[ME] || [] : [] };
+  return { roles: me.roles, scopes: me.roles.includes('section_editor') ? d.scopes[me.id] || [] : [] };
 }
 
 export async function listGroups() {
@@ -134,7 +141,7 @@ export async function listGroups() {
 export async function listMyContent({ status } = {}) {
   await delay();
   requireRole('section_editor', 'admin');
-  return db().items.filter(i => i.submitter?.id === ME && (!status || i.status === status)).sort(newest('updated_at'));
+  return db().items.filter(i => i.submitter?.id === currentId() && (!status || i.status === status)).sort(newest('updated_at'));
 }
 
 export async function getContentItem(id) {
@@ -142,7 +149,7 @@ export async function getContentItem(id) {
   const me = caller();
   const item = db().items.find(i => i.id === id);
   const staff = me.roles.includes('content_manager') || me.roles.includes('admin');
-  if (!item || (!staff && item.submitter?.id !== ME)) throw new ApiError('not_found');
+  if (!item || (!staff && item.submitter?.id !== me.id)) throw new ApiError('not_found');
   return item;
 }
 
@@ -169,12 +176,12 @@ export async function saveContentDraft({ id, values, file, onProgress }) {
   };
   let item;
   if (id) {
-    item = d.items.find(i => i.id === id && i.submitter?.id === ME);
+    item = d.items.find(i => i.id === id && i.submitter?.id === me.id);
     if (!item) throw new ApiError('not_found');
     if (!isEditable(item.status)) throw new ApiError('conflict', 'mock: not editable in this status');
     Object.assign(item, fields, { status: 'draft' });
   } else {
-    item = { id: `c${++d.seq}`, status: 'draft', submitter: person(d, ME), created_at: now(), ...fields };
+    item = { id: `c${++d.seq}`, status: 'draft', submitter: person(d, currentId()), created_at: now(), ...fields };
     d.items.unshift(item);
   }
   if (stored) item.storage_path = storageObjectPath(values.subjectId, item.id, file.name); // <subject>/<item id>/<unique name>
@@ -187,7 +194,7 @@ export async function submitContentForReview(id) {
   await delay(300);
   requireRole('section_editor', 'admin');
   const d = db();
-  const item = d.items.find(i => i.id === id && i.submitter?.id === ME);
+  const item = d.items.find(i => i.id === id && i.submitter?.id === currentId());
   if (!item) throw new ApiError('not_found');
   if (!canSubmit(item.status)) throw new ApiError('conflict');
   if (!item.file_name) throw new ApiError('invalid', 'mock: file required');
@@ -224,7 +231,7 @@ export async function decideContent(id, { decision, note }) {
   const item = d.items.find(i => i.id === id);
   if (!item) throw new ApiError('not_found');
   if (!canDecide(item.status)) throw new ApiError('conflict');
-  Object.assign(item, { status: decision === 'approve' ? 'approved' : 'rejected', review_note: (note || '').trim(), reviewer: person(d, ME), reviewed_at: now(), updated_at: now() });
+  Object.assign(item, { status: decision === 'approve' ? 'approved' : 'rejected', review_note: (note || '').trim(), reviewer: person(d, currentId()), reviewed_at: now(), updated_at: now() });
   log(d, decision === 'approve' ? 'content.approved' : 'content.rejected', 'content_item', id, note ? { reason: note.trim() } : {});
   save(d);
   return item;
@@ -288,7 +295,7 @@ function editMember(userId, fn) {
   const d = db();
   const p = d.people.find(x => x.user_id === userId);
   if (!p) throw new ApiError('not_found');
-  if (userId === ME) throw new ApiError('forbidden', 'mock: use the demo role switcher for yourself');
+  if (userId === currentId()) throw new ApiError('forbidden', 'mock: you can’t change your own roles');
   fn(d);
   save(d);
   return memberRow(d, p);
@@ -329,4 +336,22 @@ export async function listAuditLog({ cursor, action, limit } = {}) {
   requireRole('admin');
   const list = db().audit.filter(e => !action || e.action.startsWith(action));
   return page(list, { cursor, limit });
+}
+
+/* ---------- student visibility + simulator support (mock only) ---------- */
+
+/**
+ * Published mock content a student in `group` / `section` may see. Imitates the
+ * backend rule: an item restricted to a group/section is visible only there.
+ */
+export function publishedFor({ group, section } = {}) {
+  return db().items.filter(i => i.status === 'published'
+    && (i.group_name == null || i.group_name === group)
+    && (i.section == null || i.section === section));
+}
+
+/** Wipes the mock workspace back to its seed data. */
+export function resetMockWorkspace() {
+  try { sessionStorage.removeItem(DB_KEY); } catch { /* memory only */ }
+  memory.delete(DB_KEY);
 }

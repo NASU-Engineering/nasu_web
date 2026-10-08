@@ -43,6 +43,12 @@ export const CONFIG = {
     accept: ['.pdf', '.jpg', '.jpeg', '.png', '.webp', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt'],
   },
 
+  // Admin testing tools. The role simulator only ever uses mock data (see
+  // services/simulator.js); set to false to hide it.
+  features: {
+    roleSimulator: true,
+  },
+
   // Legacy resource list from the original site, still read by the mock content.
   legacyResourcesUrl: 'resources.json',
 };

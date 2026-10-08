@@ -28,7 +28,7 @@ export default async function editorUpload({ access, path, query, navigate }) {
   ]);
   const opts = scopeOptions(uploadScopes(access, SUBJECTS.map(s => s.id)), groups);
   const shell = body => consoleShell({
-    access, path, eyebrow: 'EDITOR WORKSPACE',
+    access, path, eyebrow: 'CONTENT STUDIO',
     title: existing ? 'Edit upload' : 'Upload content',
     lead: existing ? '' : 'Save a draft any time. When it’s ready, submit it for review — a content manager approves it before it’s published.',
     body,

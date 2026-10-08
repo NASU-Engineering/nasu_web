@@ -1,39 +1,38 @@
-// Staff console shell: sidebar (desktop) / tab strip (mobile) + page body.
-// The sidebar only lists workspaces the user's roles include — UX only, the
-// backend authorises every call these pages make.
+// Staff workspace shell (Content Studio, Review Desk, Admin Control Center):
+// sidebar (desktop) / tab strip (mobile) + page body. Each workspace shows ONLY
+// its own navigation — never another workspace's. UX only; the backend
+// authorises every call these pages make.
 
 import { html, mount } from './html.js';
 import { icons } from './icons.js';
 import { loadingState } from './components.js';
-import { consoleNav, activeConsoleHref, roleLabel } from '../services/roles.js';
+import { experienceForPath, experienceById, navFor, activeHref } from '../services/experiences.js';
+import { isSimulating } from '../services/simulator.js';
 
-export function consoleShell({ access, path, eyebrow, title, lead, actions = '', body }) {
-  const nav = consoleNav(access.roles);
-  const active = activeConsoleHref(nav, path);
+export function consoleShell({ path, eyebrow, title, lead, actions = '', body }) {
+  const exp = experienceById(experienceForPath(path));
+  const items = navFor(exp.id, { simulating: isSimulating() });
+  const main = items.filter(i => !i.planned);
+  const planned = items.filter(i => i.planned);
+  const active = activeHref(items, path);
   const link = item => html`
     <a href="#${item.href}" class="${item.href === active ? 'active' : ''}" ${item.href === active ? html`aria-current="page"` : ''}>
       ${icons[item.icon] || icons.chevron}<span>${item.label}</span>
     </a>`;
 
   return html`
-    <div class="console">
-      <aside class="console-nav" aria-label="Workspace">
-        <p class="console-who mono">${access.roles.filter(r => r !== 'student').map(roleLabel).join(' · ').toUpperCase()}</p>
-        ${nav.map(g => html`
+    <div class="console console-${exp.id}">
+      <aside class="console-nav" aria-label="${exp.label}">
+        <p class="console-title">${icons[exp.icon]}<span>${exp.label}</span></p>
+        <div class="console-group">${main.map(link)}</div>
+        ${planned.length ? html`
           <div class="console-group">
-            <p class="console-group-label">${g.label}</p>
-            ${g.items.map(link)}
-          </div>`)}
-        <div class="console-group">
-          <a href="#/dashboard">${icons.back}<span>Student hub</span></a>
-        </div>
+            <p class="console-group-label">Planned modules</p>
+            ${planned.map(link)}
+          </div>` : ''}
       </aside>
-      <nav class="console-tabs" aria-label="Workspace sections">
-        ${nav.flatMap(g => g.items.map(item => ({ ...item, group: g.label }))).map((item, _, all) => {
-          // e.g. "Editor overview" / "Admin overview" when several workspaces share a label
-          const label = all.filter(x => x.label === item.label).length > 1 ? `${item.group} ${item.label.toLowerCase()}` : item.label;
-          return html`<a href="#${item.href}" class="${item.href === active ? 'active' : ''}" ${item.href === active ? html`aria-current="page"` : ''}>${label}</a>`;
-        })}
+      <nav class="console-tabs" aria-label="${exp.label} sections">
+        ${main.map(item => html`<a href="#${item.href}" class="${item.href === active ? 'active' : ''}" ${item.href === active ? html`aria-current="page"` : ''}>${item.label}</a>`)}
       </nav>
       <div class="console-main">
         <div class="console-head">

@@ -3,6 +3,8 @@
 import { CONFIG } from './config.js';
 import { api, NO_ACCESS } from './services/api.js';
 import { routeAllowed } from './services/roles.js';
+import { defaultHome, experienceForPath } from './services/experiences.js';
+import { PERSONAS } from './services/simulator.js';
 import { html, mount } from './ui/html.js';
 import { renderLayout } from './ui/layout.js';
 import { errorState, loadingState } from './ui/components.js';
@@ -19,10 +21,11 @@ import profile from './views/profile.js';
 import assignments from './views/assignments.js';
 import { quizzes, activities, leaderboard } from './views/coming-soon.js';
 import editorOverview from './views/console/editor-overview.js';
-import editorUploads from './views/console/editor-uploads.js';
+import editorUploads, { editorDrafts } from './views/console/editor-uploads.js';
 import editorItem from './views/console/editor-item.js';
 import editorUpload from './views/console/editor-upload.js';
-import { reviewQueue, reviewHistory } from './views/console/review-queue.js';
+import { reviewQueue, reviewProcessed } from './views/console/review-queue.js';
+import { reviewHistory, adminReviewActivity } from './views/console/review-history.js';
 import reviewItem from './views/console/review-item.js';
 import adminOverview from './views/console/admin-overview.js';
 import adminContent from './views/console/admin-content.js';
@@ -30,6 +33,8 @@ import adminTeam from './views/console/admin-team.js';
 import adminStudents from './views/console/admin-students.js';
 import adminAudit from './views/console/admin-audit.js';
 import { adminActivities, adminQuizzes, adminLeaderboards } from './views/console/admin-modules.js';
+import adminAnalytics from './views/console/admin-analytics.js';
+import adminSimulator from './views/console/admin-simulator.js';
 
 const content = CONFIG.requireLoginForContent;
 
@@ -39,7 +44,7 @@ const EDITOR = ['section_editor', 'admin']; // admins may upload without an edit
 const REVIEWER = ['content_manager', 'admin'];
 const ADMIN = ['admin'];
 
-// auth: must be signed in · guestOnly: signed-in students are sent to the dashboard
+// auth: must be signed in · guestOnly: signed-in users are sent to their workspace (/start)
 // roles: signed in AND holding one of these roles (implies auth)
 // redirect: retired routes from the old password/activation flow
 const ROUTES = [
@@ -48,6 +53,7 @@ const ROUTES = [
   { path: '/activate', redirect: '/login' },
   { path: '/activate/verify', redirect: '/login' },
   { path: '/create-password', redirect: '/login' },
+  { path: '/start', auth: true, start: true }, // resolves the user's workspace after sign-in
   { path: '/dashboard', view: dashboard, auth: true },
   { path: '/subjects', view: subjects, auth: content },
   { path: '/subjects/:id', view: subject, auth: content },
@@ -64,14 +70,20 @@ const ROUTES = [
   { path: '/editor/uploads', view: editorUploads, roles: EDITOR },
   { path: '/editor/uploads/:id', view: editorItem, roles: EDITOR },
   { path: '/editor/upload', view: editorUpload, roles: EDITOR },
+  { path: '/editor/drafts', view: editorDrafts, roles: EDITOR },
 
   { path: '/review', view: reviewQueue, roles: REVIEWER },
+  { path: '/review/processed', view: reviewProcessed, roles: REVIEWER },
   { path: '/review/history', view: reviewHistory, roles: REVIEWER },
   { path: '/review/:id', view: reviewItem, roles: REVIEWER },
 
   { path: '/admin', view: adminOverview, roles: ADMIN },
   { path: '/admin/content', view: adminContent, roles: ADMIN },
-  { path: '/admin/review', redirect: '/review' },
+  { path: '/admin/content/:id', view: reviewItem, roles: ADMIN },
+  { path: '/admin/reviews', view: adminReviewActivity, roles: ADMIN },
+  { path: '/admin/review', redirect: '/admin/reviews' },
+  { path: '/admin/analytics', view: adminAnalytics, roles: ADMIN },
+  { path: '/admin/simulator', view: adminSimulator, roles: ADMIN },
   { path: '/admin/team', view: adminTeam, roles: ADMIN },
   { path: '/admin/students', view: adminStudents, roles: ADMIN },
   { path: '/admin/activities', view: adminActivities, roles: ADMIN },
@@ -129,7 +141,7 @@ function forbiddenState() {
       <p class="eyebrow mono">NO ACCESS</p>
       <h1 class="page-title" tabindex="-1">This workspace isn’t available to you</h1>
       <p class="state-text">Your account doesn’t have the role this page needs. If you should have access, ask a hub admin.</p>
-      <a class="btn btn-primary" href="#/dashboard">Back to dashboard</a>
+      <a class="btn btn-primary" href="#/start">Back to my workspace</a>
     </div>`;
 }
 let renderSeq = 0;
@@ -160,7 +172,7 @@ async function router() {
   } else if ((route?.auth || route?.roles) && !session) {
     return navigate('/login?next=' + encodeURIComponent(path + (qs ? '?' + qs : '')), { replace: true });
   } else if (route?.guestOnly && session) {
-    return navigate('/dashboard', { replace: true });
+    return navigate('/start', { replace: true });
   }
 
   // Roles + editor scopes (cached per account). NO_ACCESS until the backend provides them.
@@ -175,7 +187,15 @@ async function router() {
     }
   }
 
-  renderLayout({ session, path, access });
+  // After sign-in (or "home"): land in the right workspace for this account.
+  if (route?.start) {
+    return navigate(accessError ? '/dashboard' : defaultHome(access.roles, { last: lastWorkspace() }), { replace: true });
+  }
+
+  // A refused staff route is shown inside the neutral student shell, so no staff
+  // workspace chrome (title, navigation) is ever drawn for an unauthorised user.
+  const refused = Boolean(route?.roles) && (Boolean(accessError) || !routeAllowed(route.roles, access.roles));
+  renderLayout({ session, path: refused ? '/no-access' : path, access });
 
   if (route?.roles) {
     if (accessError) {
@@ -203,6 +223,7 @@ async function router() {
     document.title = `${out.title} · NASU Freshmen Hub`;
     mount(app, out.html);
     out.bind?.(app);
+    if (session && route) rememberWorkspace(experienceForPath(path));
   } catch (err) {
     if (seq !== renderSeq) return;
     if (err.code === 'unauthenticated') {
@@ -226,13 +247,39 @@ async function router() {
   app.querySelector('h1[tabindex="-1"]')?.focus({ preventScroll: true });
 }
 
+// Last workspace used, so sign-in returns there (per-browser convenience only;
+// defaultHome() ignores it unless the account is still authorised for it).
+const LAST_KEY = 'nasu.lastWorkspace';
+function lastWorkspace() { try { return localStorage.getItem(LAST_KEY); } catch { return null; } }
+function rememberWorkspace(id) { if (api.sim.current()) return; try { localStorage.setItem(LAST_KEY, id); } catch { /* ignore */ } }
+
 // Global handlers for the chrome (top bar is re-rendered on every route).
-document.addEventListener('submit', e => {
-  const form = e.target.closest('[data-top-search]');
-  if (!form) return;
-  e.preventDefault();
-  const q = form.q.value.trim();
-  navigate('/search' + (q ? '?q=' + encodeURIComponent(q) : ''));
+
+// Workspace switcher: close when clicking elsewhere or picking a workspace.
+document.addEventListener('click', e => {
+  document.querySelectorAll('details.ws-switch[open]').forEach(d => {
+    if (!d.contains(e.target) || e.target.closest('.ws-menu a')) d.open = false;
+  });
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const open = document.querySelector('details.ws-switch[open]');
+  if (open) { open.open = false; open.querySelector('summary')?.focus(); }
+});
+
+// Role simulator banner: switch persona / exit (mock data only, see services/simulator.js).
+document.addEventListener('change', async e => {
+  const sel = e.target.closest('[data-action="sim-persona"]');
+  if (!sel) return;
+  await api.sim.enter(sel.value).catch(() => {});
+  navigate(PERSONAS[sel.value]?.home || '/admin/simulator');
+  router();
+});
+document.addEventListener('click', e => {
+  if (!e.target.closest('[data-action="sim-exit"]')) return;
+  api.sim.exit();
+  navigate('/admin/simulator');
+  router();
 });
 
 // Top-bar Back / Forward: plain browser history.
@@ -263,7 +310,7 @@ async function start() {
     mount(app, loadingState('Signing you in…'));
     try {
       const { next } = await api.auth.completeSignIn();
-      navigate(safeNext(next) || '/dashboard', { replace: true });
+      navigate(safeNext(next) || '/start', { replace: true });
     } catch (err) {
       navigate('/login?error=' + encodeURIComponent(err.code || 'sign_in_failed'), { replace: true });
     }

@@ -19,7 +19,7 @@ function makeView(mode) {
       title: processed ? 'Processed submissions' : 'Review queue',
       html: consoleShell({
         access, path,
-        eyebrow: 'REVIEW',
+        eyebrow: 'REVIEW DESK',
         title: processed ? 'Processed' : 'Review queue',
         lead: processed
           ? 'Everything that has been approved, rejected or published, newest first.'
@@ -48,7 +48,7 @@ function makeView(mode) {
           const p = new URLSearchParams();
           if (state.subject) p.set('subject', state.subject);
           if (state.status) p.set('status', state.status);
-          history.replaceState(null, '', `#${processed ? '/review/history' : '/review'}${p.toString() ? `?${p}` : ''}`);
+          history.replaceState(null, '', `#${processed ? '/review/processed' : '/review'}${p.toString() ? `?${p}` : ''}`);
         };
 
         // Filters apply to what's loaded; the backend may add server-side filters later.
@@ -97,4 +97,4 @@ function makeView(mode) {
 }
 
 export const reviewQueue = makeView('pending');
-export const reviewHistory = makeView('processed');
+export const reviewProcessed = makeView('processed');

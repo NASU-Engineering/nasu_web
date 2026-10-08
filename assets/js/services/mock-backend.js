@@ -8,6 +8,7 @@ import { SUBJECTS, subjectById } from '../data/catalog.js';
 import { ApiError } from './errors.js';
 import { studentIdFromEmail } from './identity.js';
 import { normalizeResource, normalizeAnnouncement, matchesQuery } from './normalize.js';
+import { publishedFor } from './mock-workspace.js';
 
 const SESSION_KEY = 'nasu.mock.session';
 
@@ -47,6 +48,15 @@ export async function signOut() {
   store.del(SESSION_KEY);
 }
 
+// Used by the role simulator (api.sim) to sign a mock persona in and to put the
+// previous mock session back afterwards. Never touches a real Supabase session.
+export const mockSessionSnapshot = () => store.get(SESSION_KEY);
+export function setMockSession(session) { store.set(SESSION_KEY, session); }
+export function restoreMockSession(raw) {
+  if (raw == null) store.del(SESSION_KEY);
+  else store.set(SESSION_KEY, raw);
+}
+
 /* ---------- profile (mock) ---------- */
 
 export async function getMyProfile() {
@@ -54,17 +64,17 @@ export async function getMyProfile() {
   const session = await getSession();
   if (!session) throw new ApiError('unauthenticated');
   return {
-    fullName: 'Demo Student',
+    fullName: session.fullName || 'Demo Student',
     studentId: session.studentId || '—',
-    group: 'Group — (placeholder)',
-    section: 'Section — (placeholder)',
+    group: session.group || 'Group A (sample)',
+    section: session.section || 'Section 1',
   };
 }
 
 /* ---------- subjects ---------- */
 
-export async function listSubjects() {
-  const all = await allResources();
+export async function listSubjects({ includeStudio = true } = {}) {
+  const all = await visibleResources({ includeStudio });
   return SUBJECTS.map(s => ({ ...s, resourceCount: all.filter(r => r.subjectId === s.id).length }));
 }
 
@@ -116,19 +126,35 @@ async function allResources() {
   return resourceCache;
 }
 
+// Content published through the mock Content Studio / Review Desk, limited to the
+// signed-in mock student's group and section (imitating the backend rule).
+async function studioResources() {
+  const session = await getSession();
+  const profile = { group: session?.group || 'Group A (sample)', section: session?.section || 'Section 1' };
+  return publishedFor(profile).map(i => normalizeResource({
+    id: i.id, subjectId: i.subject_id, category: i.content_type, title: i.title,
+    week: i.week ?? undefined, addedAt: i.published_at, format: 'pdf', placeholder: true,
+  })).filter(Boolean);
+}
+
+async function visibleResources({ includeStudio = true } = {}) {
+  const base = await allResources();
+  return includeStudio ? [...await studioResources(), ...base] : base;
+}
+
 const newestFirst = (a, b) => (b.addedAt || '').localeCompare(a.addedAt || '');
 
-export async function listResources({ subjectId, limit } = {}) {
+export async function listResources({ subjectId, limit, includeStudio = true } = {}) {
   await delay(200);
-  let list = await allResources();
+  let list = await visibleResources({ includeStudio });
   if (subjectId) list = list.filter(r => r.subjectId === subjectId);
   list = [...list].sort(newestFirst);
   return limit ? list.slice(0, limit) : list;
 }
 
-export async function searchResources({ query, subjectId, category }) {
+export async function searchResources({ query, subjectId, category, includeStudio = true }) {
   await delay(120);
-  const list = await allResources();
+  const list = await visibleResources({ includeStudio });
   return list
     .filter(r => !subjectId || r.subjectId === subjectId)
     .filter(r => !category || r.category === category)

@@ -73,7 +73,8 @@ test('api.access fails closed when roles can’t be loaded', async () => {
   const { api, NO_ACCESS, isDemoMode } = await import('../assets/js/services/api.js');
 
   assert.equal(isDemoMode, false, 'shipped config must use the real backend');
-  assert.equal(api.dev, null, 'demo role switcher must not exist outside the mock backend');
+  assert.equal(api.dev, undefined, 'the old Profile demo-role switcher is gone (use the admin role simulator)');
+  assert.equal(api.sim.current(), null, 'no simulation unless an admin starts one');
   assert.deepEqual(await api.access.getMine(null), NO_ACCESS);
   // Under Node the Supabase client can't load: access errors instead of granting roles
   // (the router then shows an error on staff routes and the plain student hub elsewhere).

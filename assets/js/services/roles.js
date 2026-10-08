@@ -33,25 +33,9 @@ export function normalizeRoles(raw) {
 export const hasRole = (roles, role) => Array.isArray(roles) && roles.includes(role);
 export const hasAnyRole = (roles, wanted) => wanted.some(r => hasRole(roles, r));
 
-/* ---------- workspaces ---------- */
+/* ---------- route guard ---------- */
 
-// Each staff workspace and the roles that see it. The student hub is not listed:
-// it is available to anyone with a hub profile (unchanged behaviour).
-export const WORKSPACES = [
-  // Admins may create/upload content without the editor role or a scope (backend rule).
-  { id: 'editor', label: 'Editor', roles: ['section_editor', 'admin'], home: '/editor' },
-  { id: 'review', label: 'Review', roles: ['content_manager', 'admin'], home: '/review' },
-  { id: 'admin',  label: 'Admin',  roles: ['admin'], home: '/admin' },
-];
-
-export const workspacesFor = roles => WORKSPACES.filter(w => hasAnyRole(roles, w.roles));
-export const isStaff = roles => workspacesFor(roles).length > 0;
-
-/** Where "Workspace" in the top bar goes: the most powerful workspace the user has. */
-export function primaryWorkspace(roles) {
-  const ws = workspacesFor(roles);
-  return ws.length ? ws[ws.length - 1] : null;
-}
+// Experiences and their navigation live in experiences.js.
 
 /** Route guard (UX): a route with no `roles` is open to any signed-in user. */
 export function routeAllowed(routeRoles, roles) {
@@ -59,44 +43,9 @@ export function routeAllowed(routeRoles, roles) {
   return hasAnyRole(roles, routeRoles);
 }
 
-// Sidebar of the staff console, grouped by workspace. Only groups the user has.
-const CONSOLE_ITEMS = {
-  editor: [
-    { href: '/editor', label: 'Overview', icon: 'grid' },
-    { href: '/editor/uploads', label: 'My uploads', icon: 'list' },
-    { href: '/editor/upload', label: 'Upload content', icon: 'upload' },
-  ],
-  review: [
-    { href: '/review', label: 'Review queue', icon: 'inbox' },
-    { href: '/review/history', label: 'Processed', icon: 'history' },
-  ],
-  admin: [
-    { href: '/admin', label: 'Overview', icon: 'grid' },
-    { href: '/admin/content', label: 'Content', icon: 'list' },
-    { href: '/admin/team', label: 'Team & roles', icon: 'shield' },
-    { href: '/admin/students', label: 'Students', icon: 'users' },
-    { href: '/admin/activities', label: 'Activities', icon: 'flag' },
-    { href: '/admin/quizzes', label: 'Quizzes', icon: 'quiz' },
-    { href: '/admin/leaderboards', label: 'Leaderboards', icon: 'trophy' },
-    { href: '/admin/audit', label: 'Audit log', icon: 'clock' },
-  ],
-};
-
-export function consoleNav(roles) {
-  return workspacesFor(roles).map(w => ({ id: w.id, label: w.label, items: CONSOLE_ITEMS[w.id] }));
-}
-
-/** The nav item that best matches `path` (longest href prefix), or null. */
-export function activeConsoleHref(nav, path) {
-  const hrefs = nav.flatMap(g => g.items.map(i => i.href));
-  return hrefs
-    .filter(h => path === h || path.startsWith(h + '/'))
-    .sort((a, b) => b.length - a.length)[0] || null;
-}
-
 /* ---------- editor scopes ---------- */
 // Scope = { subjectId, group, section }. `null` group/section = every group /
-// every section of that subject (pending backend confirmation, see docs).
+// every section of that subject (confirmed by backend Phase 1).
 
 const sameOrAny = (scopeValue, value) => scopeValue == null || scopeValue === value;
 

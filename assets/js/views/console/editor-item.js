@@ -14,13 +14,13 @@ export default async function editorItem({ access, path, params, reload }) {
     title: item.title,
     html: consoleShell({
       access, path,
-      eyebrow: 'MY UPLOADS',
+      eyebrow: 'CONTENT STUDIO',
       title: item.title,
       actions: html`
         ${isEditable(item.status) ? html`<a class="btn btn-ghost" href="${editHref}">Edit</a>` : ''}
         ${canSubmit(item.status) ? html`<button type="button" class="btn btn-primary" id="submitBtn" ${item.file ? '' : 'disabled'} title="${item.file ? '' : 'Attach a file first'}">Submit for review</button>` : ''}`,
       body: html`
-        <a class="back-link" href="#/editor/uploads">${icons.back}<span>My uploads</span></a>
+        <a class="back-link" href="#/editor/uploads">${icons.back}<span>My content</span></a>
         <div class="item-status">${statusBadge(item.status)}${statusTrack(item.status)}</div>
         ${reviewNoteBox(item)}
         <div class="console-cols">

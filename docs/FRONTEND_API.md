@@ -86,7 +86,8 @@ Guards run only **after** the session is known. If it can't be determined
 | `/login` | guests only (signed-in → `/dashboard`) |
 | `/activate`, `/activate/verify`, `/create-password` | retired → `/login` |
 | `/dashboard`, `/subjects…`, `/search`, `/resources`, `/assignments`, `/announcements`, `/profile`, `/quizzes`, `/activities`, `/leaderboard` | signed in |
-| `/editor…`, `/review…`, `/admin…` | signed in + role (UX only — see ROLE_DASHBOARDS.md) |
+| `/start` | signed in → redirects to the account's workspace (see ROLE_PLATFORM.md) |
+| `/editor…`, `/review…`, `/admin…` | signed in + role (UX only — see ROLE_PLATFORM.md / ROLE_DASHBOARDS.md) |
 
 Errors returned from the redirect are mapped (details logged in dev only):
 
@@ -160,15 +161,8 @@ provides roles.
 node --test tests/*.test.mjs
 ```
 
-- `tests/identity.test.mjs` — `@nasu.edu.eg` detection (incl. look-alike
-  domains) and Student ID extraction.
-- `tests/static-security.test.mjs` — no secret/service keys or JWTs, only a
-  publishable key, no private table names or `.from()` queries, no admin
-  password, no password/OTP/activation-code auth or inputs, exactly one
-  `signInWithOAuth` with provider `azure`, `rpc('get_my_profile')` only; shipped
-  config uses the real backend; no identity-based authorization; every staff
-  route is role-guarded; the workspace adapter isn't wired to guessed APIs.
-- `tests/roles.test.mjs` — role normalisation, workspaces, route guards, scopes.
-- `tests/content-workflow.test.mjs` — workflow actions, upload/decision validation.
-- `tests/workspace-api.test.mjs` — row normalisers; access fails closed.
-- `tests/deep-links.test.mjs` — announcement → Hub content links.
+Security, auth and contract tests (`static-security`, `identity`,
+`supabase-workspace`, `workspace-api`), role/experience tests
+(`roles`, `experiences`, `simulator`, `mock-workflow`), and UI logic
+(`content-workflow`, `deep-links`, `updates`, `activity`, `view-logic`).
+Mock-based tests prove the frontend flow only — not production E2E.

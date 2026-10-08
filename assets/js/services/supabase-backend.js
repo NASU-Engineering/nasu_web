@@ -124,7 +124,7 @@ export async function getMyProfile() {
 const sampleContent = CONFIG.contentSource !== 'supabase';
 
 export async function listSubjects() {
-  if (sampleContent) return mock.listSubjects();
+  if (sampleContent) return mock.listSubjects({ includeStudio: false });
   return SUBJECTS.map(s => ({ ...s, resourceCount: null }));
 }
 
@@ -137,12 +137,12 @@ export async function getSubject(id) {
 
 // BACKEND REQUIRED (later): resources readable by authenticated students.
 export async function listResources(opts) {
-  if (sampleContent) return mock.listResources(opts);
+  if (sampleContent) return mock.listResources({ ...opts, includeStudio: false });
   throw new ApiError('backend_required', 'resources');
 }
 
 export async function searchResources(opts) {
-  if (sampleContent) return mock.searchResources(opts);
+  if (sampleContent) return mock.searchResources({ ...opts, includeStudio: false });
   throw new ApiError('backend_required', 'resources');
 }
 

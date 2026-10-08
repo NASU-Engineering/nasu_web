@@ -42,7 +42,7 @@ export default async function adminContent({ access, path, query }) {
       let all = [];
       let cursor = null;
       let seq = 0;
-      const hrefFor = it => `#/review/${encodeURIComponent(it.id)}`;
+      const hrefFor = it => `#/admin/content/${encodeURIComponent(it.id)}`;
 
       const syncUrl = () => {
         const p = new URLSearchParams();

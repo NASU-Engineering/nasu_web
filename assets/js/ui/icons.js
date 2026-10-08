@@ -37,6 +37,9 @@ export const icons = {
   file: svg('<path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5"/>'),
   alert: svg('<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/>'),
   plus: svg('<path d="M12 5v14M5 12h14"/>'),
+  chart: svg('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
+  swap: svg('<path d="M7 4L3 8l4 4"/><path d="M3 8h14"/><path d="M17 20l4-4-4-4"/><path d="M21 16H7"/>'),
+  chevronDown: svg('<path d="M6 9l6 6 6-6"/>'),
   // resource categories
   lecture: svg('<rect x="3" y="5" width="18" height="12" rx="1"/><path d="M10 9l5 2-5 2z"/><path d="M8 21h8"/>'),
   tutorial: svg('<path d="M12 3l9 4-9 4-9-4z"/><path d="M7 9v5c0 1.5 2.2 3 5 3s5-1.5 5-3V9"/>'),

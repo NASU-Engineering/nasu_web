@@ -116,3 +116,14 @@ test('browser never writes audit rows and never grants the admin role', async ()
   const { ASSIGNABLE_ROLES } = await import('../assets/js/services/roles.js');
   assert.deepEqual([...ASSIGNABLE_ROLES].sort(), ['content_manager', 'section_editor']);
 });
+
+test('role simulator is isolated: mock backend only, admin-gated, no real permission changes', () => {
+  const simText = shipped.find(f => /services[\\/]simulator\.js$/.test(f.path)).text;
+  assert.doesNotMatch(simText, /from '\.\/supabase|getSupabase|\.rpc\(|\.storage\./, 'simulator never imports or calls the real backend');
+  assert.deepEqual(simText.match(/^import .*$/gm), ["import { hasRole } from './roles.js';"]);
+  const apiText = shipped.find(f => /services[\\/]api\.js$/.test(f.path)).text;
+  assert.match(apiText, /const be = \(\) => \(isSimulating\(\) \? mockBackend : realBackend\);/, 'simulation routes every call to the mock');
+  assert.match(apiText, /if \(!isSimulating\(\) && !canUseSimulator\(realAccess, CONFIG\)\) throw new ApiError\('forbidden'/, 'entering requires real admin access');
+  noMatch(/setDemoRoles\([^)]*\)[\s\S]{0,40}supabase/i, 'mock roles never reach Supabase');
+  noMatch(/grantRole\([^)]*'admin'\)/, 'no code path grants the admin role');
+});

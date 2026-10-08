@@ -16,7 +16,7 @@ export default async function adminOverview({ access, path }) {
       body: html`
         <div id="adStats" class="stat-grid stat-grid-wide"></div>
         <div class="console-cols">
-          ${panel('Waiting for review', html`<div id="adQueue"></div>`, { action: html`<a class="see-all" href="#/review">Open queue</a>` })}
+          ${panel('Waiting for review', html`<div id="adQueue"></div>`, { action: html`<a class="see-all" href="#/admin/reviews">Review activity</a>` })}
           ${panel('Recent activity', html`<div id="adAudit"></div>`, { action: html`<a class="see-all" href="#/admin/audit">Audit log</a>` })}
         </div>`,
     }),
@@ -27,7 +27,7 @@ export default async function adminOverview({ access, path }) {
           ${statTile({ label: 'Students', value: s.total_students, icon: 'users', href: '#/admin/students' })}
           ${statTile({ label: 'Section editors', value: s.section_editors, icon: 'upload', href: '#/admin/team?role=section_editor' })}
           ${statTile({ label: 'Content managers', value: s.content_managers, icon: 'shield', href: '#/admin/team?role=content_manager' })}
-          ${statTile({ label: 'Pending reviews', value: s.pending_reviews, icon: 'inbox', href: '#/review' })}
+          ${statTile({ label: 'Pending reviews', value: s.pending_reviews, icon: 'inbox', href: '#/admin/reviews' })}
           ${statTile({ label: 'Published resources', value: s.published_resources, icon: 'book', href: '#/admin/content?status=published' })}
           ${statTile({ label: 'Quizzes', value: s.quizzes, icon: 'quiz', hint: 'Module not built yet', href: '#/admin/quizzes' })}
           ${statTile({ label: 'Activities', value: s.activities, icon: 'flag', hint: 'Module not built yet', href: '#/admin/activities' })}`,
@@ -35,7 +35,7 @@ export default async function adminOverview({ access, path }) {
       fill(root.querySelector('#adQueue'), {
         load: () => api.review.listQueue({ status: 'pending_review', limit: 5 }), what: 'The review queue',
         render: page => page.items.length
-          ? contentRows(page.items, { hrefFor: it => `#/review/${encodeURIComponent(it.id)}`, show: ['submitter'] })
+          ? contentRows(page.items, { hrefFor: it => `#/admin/content/${encodeURIComponent(it.id)}`, show: ['submitter'] })
           : emptyState('All caught up', 'No submissions are waiting.'),
       });
       fill(root.querySelector('#adAudit'), {
