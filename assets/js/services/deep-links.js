@@ -6,6 +6,7 @@
 // null, so a bad link renders as nothing rather than a broken route.
 
 import { subjectById } from '../data/catalog.js';
+import { t } from '../i18n/index.js';
 
 export const LINK_TYPES = ['subject', 'resource', 'assignment', 'announcement', 'quiz', 'activity'];
 
@@ -16,7 +17,8 @@ const q = id => `?item=${encodeURIComponent(id)}`;
 export function hubPath(target) {
   if (!target || !LINK_TYPES.includes(target.type)) return null;
   const { type, id, subjectId } = target;
-  if (type !== 'quiz' && type !== 'activity' && !SAFE_ID.test(String(id ?? ''))) return null;
+  const safeId = SAFE_ID.test(String(id ?? ''));
+  if (!safeId && type !== 'quiz' && type !== 'activity') return null;
   switch (type) {
     case 'subject':
       return subjectById(id) ? `/subjects/${id}` : null;
@@ -25,11 +27,11 @@ export function hubPath(target) {
       return subjectById(subjectId) ? `/subjects/${subjectId}${q(id)}` : null;
     case 'announcement':
       return `/announcements${q(id)}`;
-    // Modules not built yet: land on their page; item-level routes come with the module.
+    // A specific quiz/activity when the id is safe, otherwise their list.
     case 'quiz':
-      return '/quizzes';
+      return safeId ? `/quizzes/${id}` : '/quizzes';
     case 'activity':
-      return '/activities';
+      return safeId ? `/activities${q(id)}` : '/activities';
     default:
       return null;
   }
@@ -41,19 +43,11 @@ export function hubUrl(target, base) {
   return path ? `${base.replace(/#.*$/, '')}#${path}` : null;
 }
 
-export const LINK_LABELS = {
-  subject: 'Open subject', resource: 'Open resource', assignment: 'View assignment',
-  announcement: 'Open update', quiz: 'Take quiz', activity: 'View activity',
-};
-
-// Resource links may say what they point at (link_category), e.g. "Open board".
-const CATEGORY_CTA = {
-  lecture: 'Open lecture', tutorial: 'Open tutorial', board: 'Open board', pdf: 'Open PDF', assignment: 'View assignment',
-};
+const CTA_CATEGORIES = ['lecture', 'tutorial', 'board', 'pdf', 'assignment'];
 
 /** The one contextual call-to-action for a link target, or null when there's no valid link. */
 export function ctaLabel(target) {
   if (!hubPath(target)) return null;
-  if (target.type === 'resource' && CATEGORY_CTA[target.category]) return CATEGORY_CTA[target.category];
-  return LINK_LABELS[target.type];
+  if (target.type === 'resource' && CTA_CATEGORIES.includes(target.category)) return t(`cta.category.${target.category}`);
+  return t(`cta.${target.type}`);
 }

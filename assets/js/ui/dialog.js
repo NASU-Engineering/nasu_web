@@ -3,6 +3,7 @@
 
 import { html, mount } from './html.js';
 import { icons } from './icons.js';
+import { t } from '../i18n/index.js';
 
 /**
  * Asks before an important action. Resolves to { confirmed, value }.
@@ -11,7 +12,7 @@ import { icons } from './icons.js';
  *   run:   async (value) => {}  — optional; runs while the dialog shows a busy state. If it
  *          throws, the error message is shown in the dialog and it stays open for a retry.
  */
-export function confirmDialog({ title, body = '', confirmLabel = 'Confirm', cancelLabel = 'Cancel', tone = 'default', input = null, run = null }) {
+export function confirmDialog({ title, body = '', confirmLabel = t('common.confirm'), cancelLabel = t('common.cancel'), tone = 'default', input = null, run = null }) {
   return new Promise(resolve => {
     const dlg = document.createElement('dialog');
     dlg.className = 'dlg';
@@ -22,7 +23,7 @@ export function confirmDialog({ title, body = '', confirmLabel = 'Confirm', canc
         ${body ? html`<div class="dlg-body">${body}</div>` : ''}
         ${input ? html`
           <div class="field dlg-field">
-            <label for="dlgInput">${input.label}${input.required ? '' : html` <span class="opt">(optional)</span>`}</label>
+            <label for="dlgInput">${input.label}${input.required ? '' : html` <span class="opt">${t('common.optional')}</span>`}</label>
             <textarea id="dlgInput" rows="4" placeholder="${input.placeholder || ''}" maxlength="1000">${input.value || ''}</textarea>
             ${input.help ? html`<p class="help">${input.help}</p>` : ''}
           </div>` : ''}
@@ -62,7 +63,7 @@ export function confirmDialog({ title, body = '', confirmLabel = 'Confirm', canc
       e.preventDefault();
       const value = field ? field.value.trim() : '';
       if (input?.required && value.length < (input.minLength || 1)) {
-        showErr(input.minLength ? `Please write at least ${input.minLength} characters.` : 'This is required.');
+        showErr(input.minLength ? t('validate.minLength', { min: input.minLength }) : t('validate.required'));
         field.focus();
         return;
       }
@@ -71,14 +72,14 @@ export function confirmDialog({ title, body = '', confirmLabel = 'Confirm', canc
         busy = true;
         ok.disabled = cancel.disabled = true;
         const idle = ok.textContent;
-        ok.textContent = 'Working…';
+        ok.textContent = t('common.working');
         try {
           await run(value);
         } catch (ex) {
           busy = false;
           ok.disabled = cancel.disabled = false;
           ok.textContent = idle;
-          showErr(ex?.message || 'Something went wrong.');
+          showErr(ex?.message || t('error.unknown'));
           return;
         }
         busy = false;

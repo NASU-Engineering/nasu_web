@@ -3,15 +3,19 @@
 import { CONFIG } from './config.js';
 import { api, NO_ACCESS } from './services/api.js';
 import { routeAllowed } from './services/roles.js';
-import { defaultHome, experienceForPath } from './services/experiences.js';
+import { defaultHome, experienceForPath, REDIRECTS } from './services/experiences.js';
 import { PERSONAS } from './services/simulator.js';
 import { html, mount } from './ui/html.js';
 import { renderLayout } from './ui/layout.js';
 import { errorState, loadingState } from './ui/components.js';
+import { openSettingsDialog } from './ui/settings.js';
+import { applyTheme } from './ui/theme.js';
+import { t, applyLocale, onLocaleChange } from './i18n/index.js';
 
 import landing from './views/landing.js';
 import login from './views/login.js';
 import dashboard from './views/dashboard.js';
+import learn from './views/learn.js';
 import subjects from './views/subjects.js';
 import subject from './views/subject.js';
 import search from './views/search.js';
@@ -19,22 +23,29 @@ import announcements from './views/announcements.js';
 import notFound from './views/not-found.js';
 import profile from './views/profile.js';
 import assignments from './views/assignments.js';
-import { quizzes, activities, leaderboard } from './views/coming-soon.js';
+import { progressView, leaderboardView } from './views/progress.js';
+import { quizzesView, quizView } from './views/quizzes.js';
+import { activitiesView } from './views/activities.js';
 import editorOverview from './views/console/editor-overview.js';
-import editorUploads, { editorDrafts } from './views/console/editor-uploads.js';
+import editorUploads from './views/console/editor-uploads.js';
 import editorItem from './views/console/editor-item.js';
 import editorUpload from './views/console/editor-upload.js';
-import { reviewQueue, reviewProcessed } from './views/console/review-queue.js';
-import { reviewHistory, adminReviewActivity } from './views/console/review-history.js';
+import { reviewQueue, reviewHistory, adminReviewQueue } from './views/console/review-queue.js';
+import { adminReviewActivity } from './views/console/review-history.js';
 import reviewItem from './views/console/review-item.js';
 import adminOverview from './views/console/admin-overview.js';
 import adminContent from './views/console/admin-content.js';
 import adminTeam from './views/console/admin-team.js';
 import adminStudents from './views/console/admin-students.js';
 import adminAudit from './views/console/admin-audit.js';
-import { adminActivities, adminQuizzes, adminLeaderboards } from './views/console/admin-modules.js';
 import adminAnalytics from './views/console/admin-analytics.js';
 import adminSimulator from './views/console/admin-simulator.js';
+import adminSettings from './views/console/admin-settings.js';
+import { adminQuizzes, adminActivities, adminEngagement } from './views/console/admin-engage.js';
+
+// Language and theme before the first render (index.html also sets them early).
+applyLocale();
+applyTheme();
 
 const content = CONFIG.requireLoginForContent;
 
@@ -46,7 +57,7 @@ const ADMIN = ['admin'];
 
 // auth: must be signed in · guestOnly: signed-in users are sent to their workspace (/start)
 // roles: signed in AND holding one of these roles (implies auth)
-// redirect: retired routes from the old password/activation flow
+// redirect: retired or moved routes (old bookmarks keep working)
 const ROUTES = [
   { path: '/', view: landing },
   { path: '/login', view: login, guestOnly: true },
@@ -54,42 +65,51 @@ const ROUTES = [
   { path: '/activate/verify', redirect: '/login' },
   { path: '/create-password', redirect: '/login' },
   { path: '/start', auth: true, start: true }, // resolves the user's workspace after sign-in
+
+  // Student Hub — Home · Learn · Updates · Progress · Profile
   { path: '/dashboard', view: dashboard, auth: true },
+  { path: '/learn', view: learn, auth: content },
   { path: '/subjects', view: subjects, auth: content },
   { path: '/subjects/:id', view: subject, auth: content },
-  { path: '/search', view: search, auth: content },
-  { path: '/announcements', view: announcements, auth: content },
   { path: '/resources', view: search, auth: content },
+  { path: '/search', view: search, auth: content },
   { path: '/assignments', view: assignments, auth: content },
-  { path: '/quizzes', view: quizzes, auth: true },
-  { path: '/activities', view: activities, auth: true },
-  { path: '/leaderboard', view: leaderboard, auth: true },
+  { path: '/announcements', view: announcements, auth: content },
+  { path: '/progress', view: progressView, auth: true },
+  { path: '/quizzes', view: quizzesView, auth: true },
+  { path: '/quizzes/:id', view: quizView, auth: true },
+  { path: '/activities', view: activitiesView, auth: true },
+  { path: '/leaderboard', view: leaderboardView, auth: true },
   { path: '/profile', view: profile, auth: true },
 
+  // Content Studio — Overview · Upload · My content
   { path: '/editor', view: editorOverview, roles: EDITOR },
+  { path: '/editor/upload', view: editorUpload, roles: EDITOR },
   { path: '/editor/uploads', view: editorUploads, roles: EDITOR },
   { path: '/editor/uploads/:id', view: editorItem, roles: EDITOR },
-  { path: '/editor/upload', view: editorUpload, roles: EDITOR },
-  { path: '/editor/drafts', view: editorDrafts, roles: EDITOR },
 
+  // Review Desk — Review queue · History
   { path: '/review', view: reviewQueue, roles: REVIEWER },
-  { path: '/review/processed', view: reviewProcessed, roles: REVIEWER },
   { path: '/review/history', view: reviewHistory, roles: REVIEWER },
   { path: '/review/:id', view: reviewItem, roles: REVIEWER },
 
+  // Admin Control Center — Overview · People · Content · Insights · Settings
   { path: '/admin', view: adminOverview, roles: ADMIN },
+  { path: '/admin/people', view: adminStudents, roles: ADMIN },
+  { path: '/admin/people/staff', view: adminTeam, roles: ADMIN },
   { path: '/admin/content', view: adminContent, roles: ADMIN },
+  { path: '/admin/content/review', view: adminReviewQueue, roles: ADMIN },
+  { path: '/admin/content/quizzes', view: adminQuizzes, roles: ADMIN },
+  { path: '/admin/content/activities', view: adminActivities, roles: ADMIN },
   { path: '/admin/content/:id', view: reviewItem, roles: ADMIN },
-  { path: '/admin/reviews', view: adminReviewActivity, roles: ADMIN },
-  { path: '/admin/review', redirect: '/admin/reviews' },
-  { path: '/admin/analytics', view: adminAnalytics, roles: ADMIN },
-  { path: '/admin/simulator', view: adminSimulator, roles: ADMIN },
-  { path: '/admin/team', view: adminTeam, roles: ADMIN },
-  { path: '/admin/students', view: adminStudents, roles: ADMIN },
-  { path: '/admin/activities', view: adminActivities, roles: ADMIN },
-  { path: '/admin/quizzes', view: adminQuizzes, roles: ADMIN },
-  { path: '/admin/leaderboards', view: adminLeaderboards, roles: ADMIN },
-  { path: '/admin/audit', view: adminAudit, roles: ADMIN },
+  { path: '/admin/insights', view: adminAnalytics, roles: ADMIN },
+  { path: '/admin/insights/engagement', view: adminEngagement, roles: ADMIN },
+  { path: '/admin/insights/reviews', view: adminReviewActivity, roles: ADMIN },
+  { path: '/admin/insights/audit', view: adminAudit, roles: ADMIN },
+  { path: '/admin/settings', view: adminSettings, roles: ADMIN },
+  { path: '/admin/settings/simulator', view: adminSimulator, roles: ADMIN },
+
+  ...Object.entries(REDIRECTS).map(([path, redirect]) => ({ path, redirect })),
 ].map(r => {
   const keys = [];
   const re = new RegExp('^' + r.path.replace(/:(\w+)/g, (_, k) => { keys.push(k); return '([^/]+)'; }) + '/?$');
@@ -122,15 +142,16 @@ function safeNext(next) {
 }
 
 const app = document.getElementById('app');
+const pageTitle = title => `${title} · ${t('brand.full')}`;
 
 // Signed in with Microsoft, but the backend has no hub profile for this account.
 function noProfileState(session) {
   return html`
     <div class="state state-page">
-      <p class="eyebrow mono">NO HUB PROFILE</p>
-      <h1 class="page-title" tabindex="-1">We couldn’t find your student profile</h1>
-      <p class="state-text">You’re signed in as <strong class="mono">${session?.email || 'your NASU account'}</strong>, but this account isn’t set up in the hub yet. If you’re a prep-year engineering student, contact the prep-year office.</p>
-      <button type="button" class="btn btn-ghost" data-action="sign-out">Sign out</button>
+      <p class="eyebrow mono">${t('noProfile.eyebrow')}</p>
+      <h1 class="page-title" tabindex="-1">${t('noProfile.title')}</h1>
+      <p class="state-text">${t('noProfile.text', { email: session?.email || t('noProfile.yourAccount') })}</p>
+      <button type="button" class="btn btn-ghost" data-action="sign-out">${t('auth.signOut')}</button>
     </div>`;
 }
 
@@ -138,10 +159,10 @@ function noProfileState(session) {
 function forbiddenState() {
   return html`
     <div class="state state-page">
-      <p class="eyebrow mono">NO ACCESS</p>
-      <h1 class="page-title" tabindex="-1">This workspace isn’t available to you</h1>
-      <p class="state-text">Your account doesn’t have the role this page needs. If you should have access, ask a hub admin.</p>
-      <a class="btn btn-primary" href="#/start">Back to my workspace</a>
+      <p class="eyebrow mono">${t('forbidden.eyebrow')}</p>
+      <h1 class="page-title" tabindex="-1">${t('forbidden.title')}</h1>
+      <p class="state-text">${t('forbidden.text')}</p>
+      <a class="btn btn-primary" href="#/start">${t('common.backToWorkspace')}</a>
     </div>`;
 }
 let renderSeq = 0;
@@ -199,13 +220,13 @@ async function router() {
 
   if (route?.roles) {
     if (accessError) {
-      document.title = 'Error · NASU Freshmen Hub';
+      document.title = pageTitle(t('state.error'));
       mount(app, html`<div class="page-pad">${errorState(accessError)}</div>`);
       app.querySelector('[data-action=retry]')?.addEventListener('click', router);
       return;
     }
     if (!routeAllowed(route.roles, access.roles)) {
-      document.title = 'No access · NASU Freshmen Hub';
+      document.title = pageTitle(t('state.notAllowed'));
       mount(app, forbiddenState());
       app.querySelector('h1[tabindex="-1"]')?.focus({ preventScroll: true });
       return;
@@ -220,7 +241,7 @@ async function router() {
   try {
     const out = await view(ctx);
     if (seq !== renderSeq || !out) return; // a newer navigation won, or the view redirected
-    document.title = `${out.title} · NASU Freshmen Hub`;
+    document.title = pageTitle(out.title);
     mount(app, out.html);
     out.bind?.(app);
     if (session && route) rememberWorkspace(experienceForPath(path));
@@ -231,11 +252,11 @@ async function router() {
       return navigate('/login?expired=1', { replace: true });
     }
     if (err.code === 'profile_missing') {
-      document.title = 'No access · NASU Freshmen Hub';
+      document.title = pageTitle(t('state.notAllowed'));
       mount(app, noProfileState(session));
       return;
     }
-    document.title = 'Error · NASU Freshmen Hub';
+    document.title = pageTitle(t('state.error'));
     mount(app, html`<div class="page-pad">${errorState(err)}</div>`);
     app.querySelector('[data-action=retry]')?.addEventListener('click', router);
   } finally {
@@ -254,6 +275,14 @@ function lastWorkspace() { try { return localStorage.getItem(LAST_KEY); } catch 
 function rememberWorkspace(id) { if (api.sim.current()) return; try { localStorage.setItem(LAST_KEY, id); } catch { /* ignore */ } }
 
 // Global handlers for the chrome (top bar is re-rendered on every route).
+
+// Display settings dialog (language + theme), available in every experience.
+document.addEventListener('click', e => {
+  if (e.target.closest('[data-action="open-settings"]')) openSettingsDialog();
+});
+
+// A language change re-renders the current page in the new language.
+onLocaleChange(() => router());
 
 // Workspace switcher: close when clicking elsewhere or picking a workspace.
 document.addEventListener('click', e => {
@@ -307,7 +336,7 @@ api.auth.onChange(type => { if (type === 'signed_out' && !signingOut) router(); 
 async function start() {
   if (api.auth.isSignInReturn()) {
     renderLayout({ session: null, path: '/login' });
-    mount(app, loadingState('Signing you in…'));
+    mount(app, loadingState(t('auth.signingIn')));
     try {
       const { next } = await api.auth.completeSignIn();
       navigate(safeNext(next) || '/start', { replace: true });

@@ -1,5 +1,6 @@
-// Platform analytics + activity monitoring. Every number is labelled with where
-// it comes from; nothing is estimated. See services/activity.js.
+// Admin · Insights · Analytics: platform metrics and activity monitoring.
+// Every figure says where it comes from; nothing is estimated and nothing is
+// "real-time" (there is no presence data source). See services/activity.js.
 
 import { html } from '../../ui/html.js';
 import { api } from '../../services/api.js';
@@ -7,6 +8,7 @@ import { consoleShell, statTile, panel, fill } from '../../ui/console.js';
 import { emptyState } from '../../ui/components.js';
 import { dateTime } from '../../ui/format.js';
 import { trackingCoverage, observedActions, dailyCounts } from '../../services/activity.js';
+import { t } from '../../i18n/index.js';
 
 const SAMPLE_PAGES = 3; // audit log pages read for the activity sample (≤ 150 entries)
 
@@ -22,24 +24,21 @@ async function loadAuditSample() {
   return { entries, complete: !cursor };
 }
 
-const STATUS = {
-  recorded:      { label: 'Recorded',      cls: 'av-live' },
-  not_seen:      { label: 'Not seen yet',  cls: 'av-partial' },
-  not_collected: { label: 'Not collected', cls: 'av-none' },
-};
+const STATUS_CLS = { recorded: 'av-live', not_seen: 'av-partial', not_collected: 'av-none' };
+const avBadge = (cls, key) => html`<span class="av ${cls}">${t(key)}</span>`;
 
-const legend = html`
-  <ul class="av-legend" aria-label="Data availability">
-    <li><span class="av av-live">Live</span> read from the backend now</li>
-    <li><span class="av av-partial">Sample</span> derived from the latest audit-log entries</li>
-    <li><span class="av av-none">Not collected</span> no data source exists yet</li>
+const legend = () => html`
+  <ul class="av-legend" aria-label="${t('analytics.legend')}">
+    <li>${avBadge('av-live', 'status.source.live')} ${t('analytics.legendLive')}</li>
+    <li>${avBadge('av-partial', 'status.source.sample')} ${t('analytics.legendSample')}</li>
+    <li>${avBadge('av-none', 'status.source.not_live')} ${t('analytics.legendNone')}</li>
   </ul>`;
 
 function activityChart(entries) {
   const days = dailyCounts(entries);
   const max = Math.max(1, ...days.map(d => d.count));
   return html`
-    <div class="bars" role="img" aria-label="Audit entries per day over the last ${days.length} days">
+    <div class="bars" role="img" aria-label="${t('analytics.chartLabel', { days: days.length })}">
       ${days.map(d => html`
         <div class="bar" title="${d.day}: ${d.count}">
           <span class="bar-fill" style="height:${Math.round((d.count / max) * 100)}%"></span>
@@ -53,13 +52,13 @@ function coverageTable(entries) {
   return html`
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th scope="col">Event</th><th scope="col">Status</th><th scope="col">In sample</th><th scope="col">Last seen</th></tr></thead>
+        <thead><tr><th scope="col">${t('analytics.event')}</th><th scope="col">${t('analytics.status')}</th><th scope="col">${t('analytics.inSample')}</th><th scope="col">${t('analytics.lastSeen')}</th></tr></thead>
         <tbody>${rows.map(r => html`
           <tr>
-            <td data-label="Event">${r.label}</td>
-            <td data-label="Status"><span class="av ${STATUS[r.status].cls}">${STATUS[r.status].label}</span></td>
-            <td data-label="In sample" class="mono">${r.status === 'not_collected' ? '—' : r.count}</td>
-            <td data-label="Last seen">${r.lastAt ? dateTime(r.lastAt) : '—'}</td>
+            <td data-label="${t('analytics.event')}">${r.label}</td>
+            <td data-label="${t('analytics.status')}">${avBadge(STATUS_CLS[r.status], `analytics.coverage.${r.status}`)}</td>
+            <td data-label="${t('analytics.inSample')}" class="mono">${r.status === 'not_collected' ? '—' : r.count}</td>
+            <td data-label="${t('analytics.lastSeen')}">${r.lastAt ? dateTime(r.lastAt) : '—'}</td>
           </tr>`)}</tbody>
       </table>
     </div>`;
@@ -67,52 +66,51 @@ function coverageTable(entries) {
 
 function actionsTable(entries) {
   const rows = observedActions(entries);
-  if (!rows.length) return emptyState('No audit entries yet');
+  if (!rows.length) return emptyState(t('audit.empty'));
   return html`
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th scope="col">Action (as recorded)</th><th scope="col">Count</th><th scope="col">Last</th></tr></thead>
+        <thead><tr><th scope="col">${t('analytics.actionRecorded')}</th><th scope="col">${t('analytics.count')}</th><th scope="col">${t('analytics.last')}</th></tr></thead>
         <tbody>${rows.map(r => html`
-          <tr><td data-label="Action"><span class="mono">${r.action}</span></td><td data-label="Count" class="mono">${r.count}</td><td data-label="Last">${dateTime(r.lastAt)}</td></tr>`)}</tbody>
+          <tr><td data-label="${t('audit.action')}"><span class="mono">${r.action}</span></td><td data-label="${t('analytics.count')}" class="mono">${r.count}</td><td data-label="${t('analytics.last')}">${dateTime(r.lastAt)}</td></tr>`)}</tbody>
       </table>
     </div>`;
 }
 
 export default async function adminAnalytics({ access, path }) {
   return {
-    title: 'Analytics',
+    title: t('nav.analytics'),
     html: consoleShell({
       access, path,
-      eyebrow: 'ADMIN CONTROL CENTER',
-      title: 'Analytics',
-      lead: 'Platform metrics and activity monitoring. Each figure says where it comes from — nothing is estimated.',
+      eyebrow: t('experience.admin'),
+      title: t('nav.insights'),
+      lead: t('analytics.lead'),
       body: html`
-        ${legend}
+        ${legend()}
         <div id="anStats" class="stat-grid stat-grid-wide"></div>
         <div id="anAudit"></div>
-        ${panel('Online presence', html`
-          <div class="av-row"><span class="av av-none">Not collected</span>
-          <p class="muted">The Hub doesn’t record presence, so it can’t show who is online. A privacy-conscious design (aggregate counts from a short-lived heartbeat, no keystrokes or page content) is proposed for approval in <span class="mono">docs/ACTIVITY_MONITORING.md</span>.</p></div>`)}`,
+        ${panel(t('analytics.presence'), html`
+          <div class="av-row">${avBadge('av-none', 'status.source.not_live')}<p class="muted">${t('analytics.presenceText')}</p></div>`)}`,
     }),
     bind(root) {
       fill(root.querySelector('#anStats'), {
-        load: () => api.admin.getStats(), what: 'Platform statistics',
+        load: () => api.admin.getStats(),
         render: s => html`
-          ${statTile({ label: 'Students', value: s.total_students, icon: 'users', hint: 'Live' })}
-          ${statTile({ label: 'Section editors', value: s.section_editors, icon: 'upload', hint: 'Live' })}
-          ${statTile({ label: 'Content managers', value: s.content_managers, icon: 'shield', hint: 'Live' })}
-          ${statTile({ label: 'Pending reviews', value: s.pending_reviews, icon: 'inbox', hint: 'Live' })}
-          ${statTile({ label: 'Published resources', value: s.published_resources, icon: 'book', hint: 'Live' })}`,
+          ${statTile({ label: t('admin.stat.students'), value: s.total_students, icon: 'users', hint: t('status.source.live') })}
+          ${statTile({ label: t('admin.stat.editors'), value: s.section_editors, icon: 'upload', hint: t('status.source.live') })}
+          ${statTile({ label: t('admin.stat.managers'), value: s.content_managers, icon: 'shield', hint: t('status.source.live') })}
+          ${statTile({ label: t('admin.stat.pending'), value: s.pending_reviews, icon: 'inbox', hint: t('status.source.live') })}
+          ${statTile({ label: t('admin.stat.published'), value: s.published_resources, icon: 'book', hint: t('status.source.live') })}`,
       });
       fill(root.querySelector('#anAudit'), {
-        load: loadAuditSample, what: 'The audit log',
+        load: loadAuditSample,
         render: ({ entries, complete }) => {
-          const note = `${complete ? 'All' : 'Latest'} ${entries.length} audit-log entr${entries.length === 1 ? 'y' : 'ies'}`;
+          const note = complete ? t('analytics.sampleAll', { count: entries.length }) : t('analytics.sampleLatest', { count: entries.length });
           return html`
-            ${panel('Activity — last 14 days', html`<p class="help-dark"><span class="av av-partial">Sample</span> ${note}, per day.</p>${activityChart(entries)}`)}
+            ${panel(t('analytics.activity14'), html`<p class="help-dark">${avBadge('av-partial', 'status.source.sample')} ${note}</p>${activityChart(entries)}`)}
             <div class="console-cols">
-              ${panel('Tracking coverage', html`<p class="help-dark">What the audit log contains for each event we want to monitor (${note}).</p>${coverageTable(entries)}`)}
-              ${panel('Recorded actions', html`<p class="help-dark">Distinct actions found in the same sample, exactly as the backend names them.</p>${actionsTable(entries)}`)}
+              ${panel(t('analytics.coverage'), html`<p class="help-dark">${t('analytics.coverageText')} (${note})</p>${coverageTable(entries)}`)}
+              ${panel(t('analytics.recordedActions'), html`<p class="help-dark">${t('analytics.recordedActionsText')}</p>${actionsTable(entries)}`)}
             </div>`;
         },
       });

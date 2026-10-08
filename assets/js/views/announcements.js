@@ -6,6 +6,7 @@ import { api } from '../services/api.js';
 import { SUBJECTS } from '../data/catalog.js';
 import { UPDATE_FILTERS, sortUpdates, filterUpdates } from '../services/updates.js';
 import { pageHead, updateFeed, chips, emptyState, focusLinkedItem } from '../ui/components.js';
+import { t } from '../i18n/index.js';
 
 export default async function announcements({ query }) {
   const all = sortUpdates(await api.announcements.list());
@@ -18,19 +19,19 @@ export default async function announcements({ query }) {
     const items = filterUpdates(all, state);
     return items.length
       ? updateFeed(items)
-      : emptyState('No updates here', state.kind || state.subjectId ? 'Try another filter.' : 'New updates will appear here.');
+      : emptyState(t('updates.emptyTitle'), state.kind || state.subjectId ? t('common.tryAnotherFilter') : t('updates.emptyText'));
   };
 
   return {
-    title: 'Updates',
+    title: t('updates.title'),
     html: html`
-      ${pageHead({ title: 'Updates' })}
+      ${pageHead({ title: t('updates.title') })}
       <div class="sticky-filters upd-filters">
-        ${chips(UPDATE_FILTERS, state.kind, { name: 'Filter updates by type' })}
+        ${chips(UPDATE_FILTERS, state.kind, { name: t('filter.byType') })}
         <label class="select-wrap upd-subject">
-          <span class="visually-hidden">Subject</span>
+          <span class="visually-hidden">${t('field.subject')}</span>
           <select id="updSubject">
-            <option value="">All subjects</option>
+            <option value="">${t('filter.allSubjects')}</option>
             ${SUBJECTS.map(s => html`<option value="${s.id}" ${s.id === state.subjectId ? 'selected' : ''}>${s.code} — ${s.name}</option>`)}
           </select>
         </label>

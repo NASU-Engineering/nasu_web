@@ -6,6 +6,7 @@ import { subjectById, categoryById } from '../data/catalog.js';
 import { shortDate, relativeDays, pad2, dateTime } from './format.js';
 import { hubPath, ctaLabel } from '../services/deep-links.js';
 import { updateKind, UPDATE_KINDS } from '../services/updates.js';
+import { t } from '../i18n/index.js';
 
 export function pageHead({ eyebrow, title, code, lead, back }) {
   return html`
@@ -28,8 +29,8 @@ export function resourceCard(r, { showSubject = false } = {}) {
   const cat = categoryById(r.category);
   const subject = subjectById(r.subjectId);
   const overdue = r.dueAt && new Date(r.dueAt) < new Date();
-  const kindParts = [cat?.single?.toUpperCase(), r.week ? `WEEK ${pad2(r.week)}` : '', showSubject ? subject?.code : ''].filter(Boolean);
-  const meta = [r.addedAt ? `Added ${shortDate(r.addedAt)}` : '', r.url ? (r.format === 'pdf' ? 'PDF' : 'Link') : ''].filter(Boolean).join(' · ');
+  const kindParts = [cat?.single?.toUpperCase(), r.week ? t('common.weekN', { n: pad2(r.week) }).toUpperCase() : '', showSubject ? subject?.code : ''].filter(Boolean);
+  const meta = [r.addedAt ? t('resource.added', { date: shortDate(r.addedAt) }) : '', r.url ? (r.format === 'pdf' ? t('resource.pdf') : t('resource.link')) : ''].filter(Boolean).join(' · ');
 
   const inner = html`
     <span class="res-icon cat-${r.category}">${icons[r.category] || icons.link}</span>
@@ -38,14 +39,14 @@ export function resourceCard(r, { showSubject = false } = {}) {
       <span class="res-title">${r.title}</span>
       <span class="res-meta">
         ${meta}
-        ${r.dueAt ? html`<span class="due ${overdue ? 'overdue' : ''}">${overdue ? 'Was due' : 'Due'} ${shortDate(r.dueAt)} (${relativeDays(r.dueAt)})</span>` : ''}
-        ${r.placeholder ? html`<span class="badge">Sample</span>` : ''}
+        ${r.dueAt ? html`<span class="due ${overdue ? 'overdue' : ''}">${t(overdue ? 'resource.wasDue' : 'resource.due', { date: shortDate(r.dueAt), rel: relativeDays(r.dueAt) })}</span>` : ''}
+        ${r.placeholder ? html`<span class="badge">${t('common.sample')}</span>` : ''}
       </span>
     </span>`;
 
   return r.url
-    ? html`<a class="res" data-item="${r.id}" href="${r.url}" target="_blank" rel="noopener noreferrer">${inner}<span class="res-go" aria-label="Opens in a new tab">${icons.arrow}</span></a>`
-    : html`<div class="res res-disabled" data-item="${r.id}" title="No file attached yet">${inner}</div>`;
+    ? html`<a class="res" data-item="${r.id}" href="${r.url}" target="_blank" rel="noopener noreferrer">${inner}<span class="res-go" aria-label="${t('common.opensNewTab')}">${icons.arrow}</span></a>`
+    : html`<div class="res res-disabled" data-item="${r.id}" title="${t('resource.noFile')}">${inner}</div>`;
 }
 
 export function resourceList(items, opts) {
@@ -66,11 +67,11 @@ export function updateItem(u, { level = 2 } = {}) {
     <article class="upd ${u.pinned ? 'is-pinned' : ''}" data-item="${u.id}">
       <div class="upd-main">
         <p class="upd-meta">
-          ${u.pinned ? html`<span class="upd-pin">${icons.pin}<span>Pinned</span></span>` : ''}
+          ${u.pinned ? html`<span class="upd-pin">${icons.pin}<span>${t('update.pinned')}</span></span>` : ''}
           <span class="upd-kind kind-${kind}">${UPDATE_KINDS[kind].label}</span>
           ${subject ? html`<span class="mono">${subject.code}</span>` : ''}
           <time datetime="${u.publishedAt || ''}">${dateTime(u.publishedAt)}</time>
-          ${u.placeholder ? html`<span class="badge">Sample</span>` : ''}
+          ${u.placeholder ? html`<span class="badge">${t('common.sample')}</span>` : ''}
         </p>
         <p class="upd-title" role="heading" aria-level="${level}">${u.title}</p>
         ${u.body ? html`<p class="upd-body">${u.body}</p>` : ''}
@@ -101,7 +102,7 @@ export function subjectCard(s, index) {
       </span>
       <span class="subj-name">${s.name}</span>
       <span class="subj-foot">
-        <span>${s.resourceCount != null ? `${s.resourceCount} resources` : 'Open subject'}</span>
+        <span>${s.resourceCount != null ? t('subjectCard.resources', { count: s.resourceCount }) : t('subjectCard.open')}</span>
         ${icons.chevron}
       </span>
     </a>`;
@@ -119,10 +120,10 @@ export function emptyState(title, text) {
 }
 
 export function errorState(err) {
-  return html`<div class="state state-error" role="alert"><p class="state-title">Couldn’t load this</p><p class="state-text">${err?.message || 'Something went wrong.'}</p><button type="button" class="btn btn-ghost-dark" data-action="retry">Try again</button></div>`;
+  return html`<div class="state state-error" role="alert"><p class="state-title">${t('state.loadFailed')}</p><p class="state-text">${err?.message || t('error.unknown')}</p><button type="button" class="btn btn-ghost-dark" data-action="retry">${t('common.tryAgain')}</button></div>`;
 }
 
-export function loadingState(label = 'Loading…') {
+export function loadingState(label = t('common.loading')) {
   return html`<div class="state state-loading" aria-busy="true"><span class="spinner" aria-hidden="true"></span><span>${label}</span></div>`;
 }
 
@@ -140,6 +141,6 @@ export function microsoftButton(id) {
   return html`
     <button type="button" class="btn btn-ms btn-block" id="${id}">
       <svg class="ms-logo" viewBox="0 0 21 21" aria-hidden="true"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
-      <span class="ms-label">Continue with NASU Microsoft Account</span>
+      <span class="ms-label">${t('auth.continueMicrosoft')}</span>
     </button>`;
 }

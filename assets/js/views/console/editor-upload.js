@@ -13,6 +13,7 @@ import { consoleShell } from '../../ui/console.js';
 import { statusBadge, reviewNoteBox, fileLabel } from '../../ui/workflow.js';
 import { emptyState, formError, showFormError } from '../../ui/components.js';
 import { confirmDialog, toast } from '../../ui/dialog.js';
+import { t } from '../../i18n/index.js';
 
 const ALL = '*'; // <option> value for "All groups" / "All sections" (null in the data)
 const enc = v => (v == null ? ALL : v);
@@ -28,22 +29,22 @@ export default async function editorUpload({ access, path, query, navigate }) {
   ]);
   const opts = scopeOptions(uploadScopes(access, SUBJECTS.map(s => s.id)), groups);
   const shell = body => consoleShell({
-    access, path, eyebrow: 'CONTENT STUDIO',
-    title: existing ? 'Edit upload' : 'Upload content',
-    lead: existing ? '' : 'Save a draft any time. When it’s ready, submit it for review — a content manager approves it before it’s published.',
+    access, path, eyebrow: t('experience.editor'),
+    title: existing ? t('upload.editTitle') : t('upload.title'),
+    lead: existing ? '' : t('upload.lead'),
     body,
   });
 
   if (!opts.subjects.length) {
-    return { title: 'Upload content', html: shell(emptyState('You don’t have an upload scope yet', 'An admin assigns each editor the subjects, groups and sections they can upload for. Ask a hub admin to set yours.')) };
+    return { title: t('upload.title'), html: shell(emptyState(t('studio.noScope'), t('studio.noScopeText'))) };
   }
   if (existing && !isEditable(existing.status)) {
     return {
-      title: 'Edit upload',
+      title: t('upload.editTitle'),
       html: shell(html`
-        <div class="state"><p class="state-title">This item can’t be edited now</p>
-        <p class="state-text">It’s ${statusBadge(existing.status)} — only drafts and rejected items can be changed.</p>
-        <p><a class="btn btn-ghost" href="#/editor/uploads/${encodeURIComponent(existing.id)}">View item</a></p></div>`),
+        <div class="state"><p class="state-title">${t('upload.notEditable')}</p>
+        <p class="state-text">${statusBadge(existing.status)} ${t('upload.notEditableText')}</p>
+        <p><a class="btn btn-ghost" href="#/editor/uploads/${encodeURIComponent(existing.id)}">${t('upload.viewItem')}</a></p></div>`),
     };
   }
 
@@ -54,33 +55,33 @@ export default async function editorUpload({ access, path, query, navigate }) {
   if (existing && !subjects.some(s => s.id === existing.subjectId) && subjectById(existing.subjectId)) subjects.push(subjectById(existing.subjectId));
 
   return {
-    title: existing ? 'Edit upload' : 'Upload content',
+    title: existing ? t('upload.editTitle') : t('upload.title'),
     html: shell(html`
       ${existing ? html`
-        <a class="back-link" href="#/editor/uploads/${encodeURIComponent(existing.id)}">${icons.back}<span>Back to item</span></a>
+        <a class="back-link" href="#/editor/uploads/${encodeURIComponent(existing.id)}">${icons.back}<span>${t('upload.backToItem')}</span></a>
         <div class="item-status">${statusBadge(existing.status)}</div>
         ${reviewNoteBox(existing)}` : ''}
       <form class="form-card" id="upForm" novalidate>
         ${formError('upError')}
         <fieldset>
-          <legend>Where it goes</legend>
+          <legend>${t('upload.where')}</legend>
           <div class="field">
-            <label for="fSubject">Subject</label>
+            <label for="fSubject">${t('field.subject')}</label>
             <select id="fSubject" name="subjectId" required>
               ${subjects.map(s => html`<option value="${s.id}" ${existing?.subjectId === s.id ? 'selected' : ''}>${s.code} — ${s.name}</option>`)}
             </select>
             ${fieldErr('subjectId')}
           </div>
           <div class="form-grid form-grid-2">
-            <div class="field"><label for="fGroup">Group</label><select id="fGroup" name="group"></select></div>
-            <div class="field"><label for="fSection">Section</label><select id="fSection" name="section"></select></div>
+            <div class="field"><label for="fGroup">${t('field.group')}</label><select id="fGroup" name="group"></select></div>
+            <div class="field"><label for="fSection">${t('field.section')}</label><select id="fSection" name="section"></select></div>
           </div>
         </fieldset>
 
         <fieldset>
-          <legend>What it is</legend>
+          <legend>${t('upload.what')}</legend>
           <div class="field">
-            <span class="label" id="typeLabel">Content type</span>
+            <span class="label" id="typeLabel">${t('field.contentType')}</span>
             <div class="seg" role="radiogroup" aria-labelledby="typeLabel">
               ${CONTENT_TYPES.map((c, i) => html`
                 <label class="seg-opt"><input type="radio" name="contentType" value="${c.id}" ${(existing ? existing.contentType === c.id : i === 0) ? 'checked' : ''}>
@@ -90,39 +91,39 @@ export default async function editorUpload({ access, path, query, navigate }) {
           </div>
           <div class="form-grid">
             <div class="field">
-              <label for="fWeek">Week <span class="opt">(optional)</span></label>
+              <label for="fWeek">${t('field.week')} <span class="opt">${t('common.optional')}</span></label>
               <input id="fWeek" name="week" type="number" inputmode="numeric" min="1" max="${MAX_WEEK}" value="${existing?.week ?? ''}">
               ${fieldErr('week')}
             </div>
             <div class="field span-2">
-              <label for="fTitle">Title</label>
+              <label for="fTitle">${t('field.title')}</label>
               <input id="fTitle" name="title" type="text" maxlength="160" required value="${existing?.title ?? ''}" placeholder="e.g. Lecture 4 — Derivatives">
               ${fieldErr('title')}
             </div>
           </div>
           <div class="field">
-            <label for="fDesc">Description <span class="opt">(optional)</span></label>
-            <textarea id="fDesc" name="description" rows="3" maxlength="2000" placeholder="What students should know about this file">${existing?.description ?? ''}</textarea>
+            <label for="fDesc">${t('field.description')} <span class="opt">${t('common.optional')}</span></label>
+            <textarea id="fDesc" name="description" rows="3" maxlength="2000" placeholder="${t('upload.descPlaceholder')}">${existing?.description ?? ''}</textarea>
             ${fieldErr('description')}
           </div>
         </fieldset>
 
         <fieldset>
-          <legend>File</legend>
+          <legend>${t('field.file')}</legend>
           <label class="drop" id="drop">
             <input type="file" id="fFile" name="file" accept="${accept.join(',')}" class="visually-hidden">
             ${icons.upload}
-            <span class="drop-main" id="dropMain">${existing?.file ? `Current: ${fileLabel(existing.file)}` : 'Choose a file or drop it here'}</span>
-            <span class="drop-sub">${accept.join(' ')} · up to ${maxMb} MB${existing?.file ? ' · choose a new file to replace it' : ''}</span>
+            <span class="drop-main" id="dropMain">${existing?.file ? t('upload.current', { file: fileLabel(existing.file) }) : t('upload.choose')}</span>
+            <span class="drop-sub">${t('upload.limits', { types: accept.join(' '), max: maxMb })}${existing?.file ? ` · ${t('upload.replace')}` : ''}</span>
           </label>
           ${fieldErr('file')}
           <div class="progress" id="progress" hidden><span class="progress-bar" id="progressBar"></span><span class="progress-text mono" id="progressText"></span></div>
         </fieldset>
 
         <div class="form-actions">
-          <a class="btn btn-quiet" href="${existing ? `#/editor/uploads/${encodeURIComponent(existing.id)}` : '#/editor/uploads'}">Cancel</a>
-          <button type="button" class="btn btn-ghost-dark" id="saveBtn">Save draft</button>
-          <button type="submit" class="btn btn-primary" id="submitBtn">Submit for review</button>
+          <a class="btn btn-quiet" href="${existing ? `#/editor/uploads/${encodeURIComponent(existing.id)}` : '#/editor/uploads'}">${t('common.cancel')}</a>
+          <button type="button" class="btn btn-ghost-dark" id="saveBtn">${t('upload.saveDraft')}</button>
+          <button type="submit" class="btn btn-primary" id="submitBtn">${t('studio.submit')}</button>
         </div>
       </form>`),
 
@@ -145,13 +146,13 @@ export default async function editorUpload({ access, path, query, navigate }) {
       };
       const syncGroups = (g = existing?.group, s = existing?.section) => {
         let list = opts.groupsFor(form.subjectId.value);
-        if (!list.length) list = [{ value: g ?? null, label: g ?? 'All groups' }];
+        if (!list.length) list = [{ value: g ?? null, label: g ?? t('scope.allGroups') }];
         fillSelect(form.group, list, g);
         syncSections(s);
       };
       const syncSections = s => {
         let list = opts.sectionsFor(form.subjectId.value, dec(form.group.value));
-        if (!list.length) list = [{ value: s ?? null, label: s ?? 'All sections' }];
+        if (!list.length) list = [{ value: s ?? null, label: s ?? t('scope.allSections') }];
         fillSelect(form.section, list, s);
       };
       form.subjectId.addEventListener('change', () => syncGroups(null, null));
@@ -163,7 +164,7 @@ export default async function editorUpload({ access, path, query, navigate }) {
         chosen = f || null;
         root.querySelector('#dropMain').textContent = chosen
           ? `${chosen.name} · ${formatBytes(chosen.size)}`
-          : (existing?.file ? `Current: ${fileLabel(existing.file)}` : 'Choose a file or drop it here');
+          : (existing?.file ? t('upload.current', { file: fileLabel(existing.file) }) : t('upload.choose'));
         drop.classList.toggle('has-file', Boolean(chosen));
         showFieldErrors({});
       };
@@ -199,7 +200,7 @@ export default async function editorUpload({ access, path, query, navigate }) {
       const onProgress = f => {
         progress.hidden = false;
         root.querySelector('#progressBar').style.width = `${Math.round(f * 100)}%`;
-        root.querySelector('#progressText').textContent = f >= 1 ? 'Uploaded' : `Uploading… ${Math.round(f * 100)}%`;
+        root.querySelector('#progressText').textContent = f >= 1 ? t('upload.uploaded') : t('upload.uploading', { percent: Math.round(f * 100) });
       };
 
       async function save(values) {
@@ -226,19 +227,19 @@ export default async function editorUpload({ access, path, query, navigate }) {
 
         if (submit) {
           const { confirmed } = await confirmDialog({
-            title: 'Submit for review?',
-            body: html`<p>“${values.title}” will be sent to a content manager. You can’t edit it while it’s being reviewed.</p>`,
-            confirmLabel: 'Submit for review',
+            title: t('studio.submitTitle'),
+            body: html`<p>${t('studio.submitText', { title: values.title })}</p>`,
+            confirmLabel: t('studio.submit'),
             run: async () => { const item = await save(values); await api.editor.submit(item.id); },
           });
           if (!confirmed) return;
-          toast('Submitted for review');
+          toast(t('studio.submitted'));
         } else {
           setBusy(true);
           try { await save(values); }
           catch (err) { setBusy(false); showFormError(errBox, err.message); errBox.scrollIntoView({ block: 'center' }); return; }
           setBusy(false);
-          toast('Draft saved');
+          toast(t('upload.saved'));
         }
         navigate(`/editor/uploads/${encodeURIComponent(savedId)}`);
       }

@@ -1,34 +1,28 @@
 // Central error handling. Backends throw ApiError with a CODE; the message the
-// student sees always comes from MESSAGES below — never from the server — so
-// no database details, table names, SQL errors or account-existence hints can
-// reach the UI.
+// user sees always comes from the i18n catalogs (key "error.<code>") — never
+// from the server — so no database details, table names, SQL errors or
+// account-existence hints can reach the UI. Messages follow the current language.
 
-export const MESSAGES = {
-  sign_in_cancelled: 'Sign-in was cancelled. You can try again whenever you’re ready.',
-  sign_in_denied: 'Your NASU account couldn’t be signed in to the hub. If you’re a prep-year engineering student, contact the prep-year office.',
-  sign_in_failed: 'Sign-in didn’t complete. Please try again.',
-  wrong_account: 'Please sign in with your NASU university Microsoft account (@nasu.edu.eg).',
-  rate_limited: 'Too many attempts. Please wait a few minutes and try again.',
-  unauthenticated: 'Please sign in to continue.',
-  profile_missing: 'You’re signed in, but your student profile isn’t set up in the hub yet. Contact the prep-year office.',
-  not_found: 'We couldn’t find that page.',
-  network: 'Could not reach the server. Check your connection and try again.',
-  not_configured: 'The hub is not connected to its server yet.',
-  backend_required: 'This isn’t available yet. Please try again later.',
-  forbidden: 'You don’t have permission to do that. If you think this is a mistake, contact a hub admin.',
-  conflict: 'This item was changed by someone else. Reload it and try again.',
-  invalid: 'Some details are missing or not accepted. Check the form and try again.',
-  upload_failed: 'The file couldn’t be uploaded. Check your connection and try again.',
-  preview_unavailable: 'A preview isn’t available for this file yet.',
-  unknown: 'Something went wrong. Please try again.',
-};
+import { t } from '../i18n/index.js';
+
+export const ERROR_CODES = [
+  'sign_in_cancelled', 'sign_in_denied', 'sign_in_failed', 'wrong_account', 'rate_limited',
+  'unauthenticated', 'profile_missing', 'not_found', 'network', 'not_configured', 'backend_required',
+  'forbidden', 'conflict', 'invalid', 'upload_failed', 'preview_unavailable', 'unknown',
+];
+
+/** { code: message } with messages resolved in the current language at read time. */
+export const MESSAGES = Object.defineProperties({}, Object.fromEntries(ERROR_CODES.map(code =>
+  [code, { enumerable: true, get: () => t(`error.${code}`) }])));
 
 export class ApiError extends Error {
-  /** @param {keyof MESSAGES} code  @param {unknown} [cause] technical detail, dev console only */
+  /** @param {string} code one of ERROR_CODES  @param {unknown} [cause] technical detail, dev console only */
   constructor(code, cause) {
-    super(MESSAGES[code] || MESSAGES.unknown);
+    super('');
     this.name = 'ApiError';
-    this.code = MESSAGES[code] ? code : 'unknown';
+    this.code = ERROR_CODES.includes(code) ? code : 'unknown';
+    // Read lazily so the text follows a language switch after the error was created.
+    Object.defineProperty(this, 'message', { get: () => t(`error.${this.code}`), configurable: true });
     if (cause !== undefined) this.cause = cause;
   }
 }

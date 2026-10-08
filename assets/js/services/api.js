@@ -238,6 +238,23 @@ export const api = {
     }),
   },
 
+  /* ----- engagement: quizzes, activities, XP, leaderboards (mock only until the backend exists) ----- */
+
+  engage: {
+    progress: wrap('engage', () => be().getProgress()),
+    quizzes: wrap('engage', ({ subjectId = '' } = {}) => be().listQuizzes({ subjectId: subjectId || undefined })),
+    quiz: wrap('engage', id => be().getQuiz(id)),
+    /** answers: { questionId: optionId }. The server scores it and decides any XP. */
+    submitQuiz: wrap('engage', (id, answers) => be().submitQuiz(id, answers)),
+    activities: wrap('engage', () => be().listActivities()),
+    joinActivity: wrap('engage', id => be().joinActivity(id)),
+    leaveActivity: wrap('engage', id => be().leaveActivity(id)),
+    leaderboard: wrap('engage', ({ scope = 'section' } = {}) => be().getLeaderboard({ scope })),
+    adminQuizzes: wrap('engage', () => be().adminListQuizzes()),
+    adminActivities: wrap('engage', () => be().adminListActivities()),
+    adminStats: wrap('engage', () => be().adminEngagementStats()),
+  },
+
   /* ----- role experience simulator (admin testing tool, mock data only) ----- */
 
   sim: {
@@ -261,7 +278,7 @@ export const api = {
     }),
     exit: () => exitSimulation(),
     /** Resets the simulator's own sample data (mock workspace only). */
-    reset: () => { mockBackend.resetMockWorkspace(); },
+    reset: () => { mockBackend.resetMockWorkspace(); mockBackend.resetMockEngagement(); },
   },
 };
 

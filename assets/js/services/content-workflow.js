@@ -6,19 +6,20 @@
 // decides which transitions are actually allowed for the caller.
 
 import { CATEGORIES } from '../data/catalog.js';
+import { t } from '../i18n/index.js';
 
 export const STATUSES = {
-  draft:          { id: 'draft',          label: 'Draft',          tone: 'neutral' },
-  pending_review: { id: 'pending_review', label: 'Pending review', tone: 'pending' },
-  approved:       { id: 'approved',       label: 'Approved',       tone: 'ok' },
-  rejected:       { id: 'rejected',       label: 'Rejected',       tone: 'bad' },
-  published:      { id: 'published',      label: 'Published',      tone: 'live' },
-  archived:       { id: 'archived',       label: 'Archived',       tone: 'neutral' },
+  draft:          { id: 'draft',          get label() { return t('status.draft'); },          tone: 'neutral' },
+  pending_review: { id: 'pending_review', get label() { return t('status.pending_review'); }, tone: 'pending' },
+  approved:       { id: 'approved',       get label() { return t('status.approved'); },       tone: 'ok' },
+  rejected:       { id: 'rejected',       get label() { return t('status.rejected'); },       tone: 'bad' },
+  published:      { id: 'published',      get label() { return t('status.published'); },      tone: 'live' },
+  archived:       { id: 'archived',       get label() { return t('status.archived'); },       tone: 'neutral' },
 };
 // Note: the backend calls 'pending_review' simply 'pending' (mapped in the Supabase adapter).
 
 export const STATUS_IDS = Object.keys(STATUSES);
-export const statusMeta = id => STATUSES[id] || { id, label: id || 'Unknown', tone: 'neutral' };
+export const statusMeta = id => STATUSES[id] || { id, label: id || t('status.unknown'), tone: 'neutral' };
 
 // Content types are the existing resource categories.
 export const CONTENT_TYPES = CATEGORIES;
@@ -53,24 +54,24 @@ function extOf(name) {
  */
 export function validateSubmission(values, { maxBytes = Infinity, accept = [], requireFile = false } = {}) {
   const errors = {};
-  if (blank(values.subjectId)) errors.subjectId = 'Choose a subject.';
-  if (!CONTENT_TYPES.some(c => c.id === values.contentType)) errors.contentType = 'Choose a content type.';
+  if (blank(values.subjectId)) errors.subjectId = t('validate.subject');
+  if (!CONTENT_TYPES.some(c => c.id === values.contentType)) errors.contentType = t('validate.contentType');
   if (!blank(values.week)) {
     const w = Number(values.week);
-    if (!Number.isInteger(w) || w < 1 || w > MAX_WEEK) errors.week = `Week must be a whole number from 1 to ${MAX_WEEK}.`;
+    if (!Number.isInteger(w) || w < 1 || w > MAX_WEEK) errors.week = t('validate.week', { max: MAX_WEEK });
   }
   const title = String(values.title ?? '').trim();
-  if (!title) errors.title = 'Add a title.';
-  else if (title.length > 160) errors.title = 'Keep the title under 160 characters.';
-  if (String(values.description ?? '').length > 2000) errors.description = 'Keep the description under 2000 characters.';
+  if (!title) errors.title = t('validate.title');
+  else if (title.length > 160) errors.title = t('validate.titleLong', { max: 160 });
+  if (String(values.description ?? '').length > 2000) errors.description = t('validate.descriptionLong', { max: 2000 });
 
   const file = values.file;
   if (file) {
-    if (accept.length && !accept.includes(extOf(file.name))) errors.file = `This file type isn’t accepted. Use ${accept.join(', ')}.`;
-    else if (file.size > maxBytes) errors.file = `This file is too large (max ${Math.round(maxBytes / 1048576)} MB).`;
-    else if (file.size === 0) errors.file = 'This file is empty.';
+    if (accept.length && !accept.includes(extOf(file.name))) errors.file = t('validate.fileType', { types: accept.join(', ') });
+    else if (file.size > maxBytes) errors.file = t('validate.fileSize', { max: Math.round(maxBytes / 1048576) });
+    else if (file.size === 0) errors.file = t('validate.fileEmpty');
   } else if (requireFile && !values.existingFile) {
-    errors.file = 'Attach a file before submitting for review.';
+    errors.file = t('validate.fileRequired');
   }
   return { ok: Object.keys(errors).length === 0, errors };
 }
@@ -79,9 +80,9 @@ export function validateSubmission(values, { maxBytes = Infinity, accept = [], r
 export function validateDecision(decision, note) {
   const text = String(note ?? '').trim();
   if (decision === 'reject' && text.length < MIN_REASON_LENGTH) {
-    return { ok: false, error: `Tell the editor what to fix (at least ${MIN_REASON_LENGTH} characters).` };
+    return { ok: false, error: t('validate.reasonShort', { min: MIN_REASON_LENGTH }) };
   }
-  if (text.length > 1000) return { ok: false, error: 'Keep the note under 1000 characters.' };
+  if (text.length > 1000) return { ok: false, error: t('validate.noteLong', { max: 1000 }) };
   return { ok: true, error: '' };
 }
 

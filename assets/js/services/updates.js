@@ -3,19 +3,21 @@
 // The Hub is the source of truth; WhatsApp "Updates" will only distribute a
 // short notice + deep link back here (not built yet).
 
+import { t } from '../i18n/index.js';
+
 // Kinds shown as the primary filters. 'general' has no filter of its own (only "All").
 export const UPDATE_KINDS = {
-  academic: { id: 'academic', label: 'Academic' },
-  deadline: { id: 'deadline', label: 'Deadline' },
-  activity: { id: 'activity', label: 'Activity' },
-  general:  { id: 'general',  label: 'General' },
+  academic: { id: 'academic', get label() { return t('update.kind.academic'); } },
+  deadline: { id: 'deadline', get label() { return t('update.kind.deadline'); } },
+  activity: { id: 'activity', get label() { return t('update.kind.activity'); } },
+  general: { id: 'general', get label() { return t('update.kind.general'); } },
 };
 
 export const UPDATE_FILTERS = [
-  { value: '', label: 'All' },
-  { value: 'academic', label: 'Academic' },
-  { value: 'deadline', label: 'Deadlines' },
-  { value: 'activity', label: 'Activities' },
+  { value: '', get label() { return t('update.filter.all'); } },
+  { value: 'academic', get label() { return t('update.filter.academic'); } },
+  { value: 'deadline', get label() { return t('update.filter.deadline'); } },
+  { value: 'activity', get label() { return t('update.filter.activity'); } },
 ];
 
 const LINK_KIND = { assignment: 'deadline', activity: 'activity', quiz: 'academic', resource: 'academic', subject: 'academic' };

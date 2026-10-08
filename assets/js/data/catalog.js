@@ -1,22 +1,31 @@
 // Public course catalog — the six prep-year subjects and resource categories.
 // This is non-sensitive reference data; the backend may take ownership of it later.
+// Display names come from the i18n catalogs (getters), so they follow the
+// selected language; `nameEn` stays available for search in both languages.
+
+import { t } from '../i18n/index.js';
+
+const subject = (id, code, nameEn) => ({
+  id, code, nameEn,
+  get name() { return t(`subject.${id}`); },
+});
 
 export const SUBJECTS = [
-  { id: 'math1', code: 'BSC111', name: 'Mathematics I' },
-  { id: 'vib',   code: 'BSC121', name: 'Vibration and Waves' },
-  { id: 'stat',  code: 'BSC131', name: 'Statics' },
-  { id: 'chem',  code: 'BSC141', name: 'Engineering Chemistry' },
-  { id: 'soc',   code: 'ASU101', name: 'Societal Issues' },
-  { id: 'draw',  code: 'ARC171', name: 'Engineering and Architectural Drawings and Projection' },
+  subject('math1', 'BSC111', 'Mathematics I'),
+  subject('vib',   'BSC121', 'Vibration and Waves'),
+  subject('stat',  'BSC131', 'Statics'),
+  subject('chem',  'BSC141', 'Engineering Chemistry'),
+  subject('soc',   'ASU101', 'Societal Issues'),
+  subject('draw',  'ARC171', 'Engineering and Architectural Drawings and Projection'),
 ];
 
-export const CATEGORIES = [
-  { id: 'lecture',    label: 'Lectures',    single: 'Lecture' },
-  { id: 'tutorial',   label: 'Tutorials',   single: 'Tutorial' },
-  { id: 'board',      label: 'Boards',      single: 'Board' },
-  { id: 'pdf',        label: 'PDFs',        single: 'PDF' },
-  { id: 'assignment', label: 'Assignments', single: 'Assignment' },
-];
+const category = id => ({
+  id,
+  get label() { return t(`category.${id}.plural`); },
+  get single() { return t(`category.${id}.single`); },
+});
+
+export const CATEGORIES = ['lecture', 'tutorial', 'board', 'pdf', 'assignment'].map(category);
 
 export function subjectById(id) {
   return SUBJECTS.find(s => s.id === id) || null;

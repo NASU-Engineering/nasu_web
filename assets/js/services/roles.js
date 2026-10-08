@@ -5,11 +5,13 @@
 // read/write is authorised by the backend (RLS / RPC checks). Hiding a button
 // here is a convenience, not a security boundary.
 
+import { t } from '../i18n/index.js';
+
 export const ROLES = {
-  student:         { id: 'student',         label: 'Student' },
-  section_editor:  { id: 'section_editor',  label: 'Section Editor' },
-  content_manager: { id: 'content_manager', label: 'Content Manager' },
-  admin:           { id: 'admin',           label: 'Admin' },
+  student:         { id: 'student',         get label() { return t('role.student'); } },
+  section_editor:  { id: 'section_editor',  get label() { return t('role.section_editor'); } },
+  content_manager: { id: 'content_manager', get label() { return t('role.content_manager'); } },
+  admin:           { id: 'admin',           get label() { return t('role.admin'); } },
 };
 
 export const ROLE_IDS = Object.keys(ROLES);
@@ -70,17 +72,17 @@ export function scopeOptions(scopes, groups = []) {
   function groupsFor(subjectId) {
     const mine = list.filter(s => s.subjectId === subjectId);
     if (mine.some(s => s.group == null)) {
-      return [{ value: null, label: 'All groups' }, ...allGroupNames.map(n => ({ value: n, label: n }))];
+      return [{ value: null, label: t('scope.allGroups') }, ...allGroupNames.map(n => ({ value: n, label: n }))];
     }
     return [...new Set(mine.map(s => s.group))].map(n => ({ value: n, label: n }));
   }
 
   function sectionsFor(subjectId, group) {
-    if (group == null) return [{ value: null, label: 'All sections' }];
+    if (group == null) return [{ value: null, label: t('scope.allSections') }];
     const mine = list.filter(s => s.subjectId === subjectId && sameOrAny(s.group, group));
     if (mine.some(s => s.section == null)) {
       const known = groups.find(g => g.name === group)?.sections || [];
-      return [{ value: null, label: 'All sections' }, ...known.map(n => ({ value: n, label: n }))];
+      return [{ value: null, label: t('scope.allSections') }, ...known.map(n => ({ value: n, label: n }))];
     }
     return [...new Set(mine.map(s => s.section))].map(n => ({ value: n, label: n }));
   }
@@ -98,4 +100,4 @@ export function uploadScopes(access, subjectIds) {
 }
 
 export const scopeLabel = s =>
-  `${s.group == null ? 'All groups' : s.group} · ${s.section == null ? 'All sections' : s.section}`;
+  `${s.group == null ? t('scope.allGroups') : s.group} · ${s.section == null ? t('scope.allSections') : s.section}`;

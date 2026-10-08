@@ -2,6 +2,7 @@
 
 import { api } from '../services/api.js';
 import { showFormError } from './components.js';
+import { t } from '../i18n/index.js';
 
 /**
  * @param {HTMLButtonElement} btn   a microsoftButton()
@@ -16,7 +17,7 @@ export function bindMicrosoftSignIn(btn, errEl, next = null) {
   btn.addEventListener('click', async () => {
     showFormError(errEl, '');
     btn.disabled = true;
-    label.textContent = 'Opening Microsoft sign-in…';
+    label.textContent = t('auth.opening');
     try {
       // On success the browser leaves for Microsoft, so the busy state stays.
       await api.auth.startSignIn({ next });

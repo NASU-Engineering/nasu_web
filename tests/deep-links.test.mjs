@@ -9,7 +9,9 @@ test('hubPath maps link targets to in-app routes', () => {
   assert.equal(hubPath({ type: 'resource', id: 'r-12', subjectId: 'stat' }), '/subjects/stat?item=r-12');
   assert.equal(hubPath({ type: 'assignment', id: 'a1', subjectId: 'chem' }), '/subjects/chem?item=a1');
   assert.equal(hubPath({ type: 'announcement', id: '42' }), '/announcements?item=42');
-  assert.equal(hubPath({ type: 'quiz', id: 'q1' }), '/quizzes');
+  assert.equal(hubPath({ type: 'quiz', id: 'q1' }), '/quizzes/q1');
+  assert.equal(hubPath({ type: 'quiz', id: '../x' }), '/quizzes', 'unsafe id falls back to the list');
+  assert.equal(hubPath({ type: 'activity', id: 'w1' }), '/activities?item=w1');
   assert.equal(hubPath({ type: 'activity' }), '/activities');
 });
 

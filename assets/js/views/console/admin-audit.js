@@ -5,12 +5,13 @@ import { api } from '../../services/api.js';
 import { consoleShell, workspaceErrorState } from '../../ui/console.js';
 import { chips, emptyState, loadingState } from '../../ui/components.js';
 import { personLabel } from '../../ui/workflow.js';
+import { t } from '../../i18n/index.js';
 
 const ACTION_FILTERS = [
-  { value: '', label: 'All' },
-  { value: 'content.', label: 'Content' },
-  { value: 'role.', label: 'Roles' },
-  { value: 'scope.', label: 'Scopes' },
+  { value: '', get label() { return t('common.all'); } },
+  { value: 'content.', get label() { return t('audit.filter.content'); } },
+  { value: 'role.', get label() { return t('audit.filter.roles'); } },
+  { value: 'scope.', get label() { return t('audit.filter.scopes'); } },
 ];
 
 const timeFmt = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -31,19 +32,19 @@ export function auditRows(entries, { compact = false } = {}) {
   if (compact) {
     return html`<ul class="audit-compact">${entries.map(e => html`
       <li><span class="audit-action mono tone-${tone(e.action)}">${e.action}</span>
-      <span>${e.actor?.fullName || 'System'}</span><span class="muted">${when(e.createdAt)}</span></li>`)}</ul>`;
+      <span>${e.actor?.fullName || t('audit.system')}</span><span class="muted">${when(e.createdAt)}</span></li>`)}</ul>`;
   }
   return html`
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th scope="col">When</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Entity</th><th scope="col">Details</th></tr></thead>
+        <thead><tr><th scope="col">${t('audit.when')}</th><th scope="col">${t('audit.actor')}</th><th scope="col">${t('audit.action')}</th><th scope="col">${t('audit.entity')}</th><th scope="col">${t('audit.details')}</th></tr></thead>
         <tbody>${entries.map(e => html`
           <tr>
-            <td data-label="When" class="nowrap">${when(e.createdAt)}</td>
-            <td data-label="Actor">${e.actor ? personLabel(e.actor) : 'System'}</td>
-            <td data-label="Action"><span class="audit-action mono tone-${tone(e.action)}">${e.action}</span></td>
-            <td data-label="Entity"><span class="mono">${e.entityType}${e.entityId ? ` · ${e.entityId}` : ''}</span></td>
-            <td data-label="Details">${metadataView(e.metadata)}</td>
+            <td data-label="${t('audit.when')}" class="nowrap">${when(e.createdAt)}</td>
+            <td data-label="${t('audit.actor')}">${e.actor ? personLabel(e.actor) : t('audit.system')}</td>
+            <td data-label="${t('audit.action')}"><span class="audit-action mono tone-${tone(e.action)}">${e.action}</span></td>
+            <td data-label="${t('audit.entity')}"><span class="mono">${e.entityType}${e.entityId ? ` · ${e.entityId}` : ''}</span></td>
+            <td data-label="${t('audit.details')}">${metadataView(e.metadata)}</td>
           </tr>`)}
         </tbody>
       </table>
@@ -53,14 +54,14 @@ export function auditRows(entries, { compact = false } = {}) {
 export default async function adminAudit({ access, path }) {
   let action = '';
   return {
-    title: 'Audit log',
+    title: t('nav.auditLog'),
     html: consoleShell({
       access, path,
-      eyebrow: 'ADMIN CONTROL CENTER',
-      title: 'Audit log',
-      lead: 'Every privileged change, recorded by the backend. Read-only.',
+      eyebrow: t('experience.admin'),
+      title: t('nav.insights'),
+      lead: t('audit.lead'),
       body: html`
-        <div class="toolbar">${chips(ACTION_FILTERS, '', { name: 'Filter by action' })}</div>
+        <div class="toolbar">${chips(ACTION_FILTERS, '', { name: t('filter.byAction') })}</div>
         <div id="auList"></div>
         <div class="load-more" id="auMore"></div>`,
     }),
@@ -80,12 +81,12 @@ export default async function adminAudit({ access, path }) {
           if (mine !== seq) return;
           all = more ? [...all, ...page.items] : page.items;
           cursor = page.nextCursor;
-          mount(listEl, all.length ? auditRows(all) : emptyState('No entries', action ? 'Try another filter.' : 'Actions will be recorded here.'));
-          mount(moreEl, cursor ? html`<button type="button" class="btn btn-ghost">Load more</button>` : '');
+          mount(listEl, all.length ? auditRows(all) : emptyState(t('audit.empty'), action ? t('common.tryAnotherFilter') : t('audit.emptyText')));
+          mount(moreEl, cursor ? html`<button type="button" class="btn btn-ghost">${t('common.loadMore')}</button>` : '');
           moreEl.querySelector('button')?.addEventListener('click', () => load(true));
         } catch (err) {
           if (mine !== seq) return;
-          mount(listEl, workspaceErrorState(err, 'The audit log'));
+          mount(listEl, workspaceErrorState(err));
           mount(moreEl, '');
           listEl.querySelector('[data-action=retry]')?.addEventListener('click', () => load());
         }

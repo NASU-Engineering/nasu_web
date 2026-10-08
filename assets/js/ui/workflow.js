@@ -5,6 +5,7 @@ import { icons } from './icons.js';
 import { subjectById, categoryById } from '../data/catalog.js';
 import { statusMeta, formatBytes } from '../services/content-workflow.js';
 import { shortDate, pad2 } from './format.js';
+import { t } from '../i18n/index.js';
 
 export function statusBadge(status) {
   const m = statusMeta(status);
@@ -12,12 +13,12 @@ export function statusBadge(status) {
 }
 
 export function targetLabel(item) {
-  const group = item.group ?? 'All groups';
-  const section = item.section ?? 'All sections';
+  const group = item.group ?? t('scope.allGroups');
+  const section = item.section ?? t('scope.allSections');
   return `${group} · ${section}`;
 }
 
-export const personLabel = p => (p ? `${p.fullName || 'Unknown'}${p.studentId ? ` (${p.studentId})` : ''}` : '—');
+export const personLabel = p => (p ? `${p.fullName || t('common.unknown')}${p.studentId ? ` (${p.studentId})` : ''}` : '—');
 
 /** The reviewer's reason on a rejected item — always visible to the editor. */
 export function reviewNoteBox(item) {
@@ -25,7 +26,7 @@ export function reviewNoteBox(item) {
   const rejected = item.status === 'rejected';
   return html`
     <div class="review-note ${rejected ? 'is-rejected' : ''}" ${rejected ? html`role="note"` : ''}>
-      <p class="review-note-head">${rejected ? icons.alert : icons.check}<span>${rejected ? 'Rejected — reason from the reviewer' : 'Reviewer note'}</span></p>
+      <p class="review-note-head">${rejected ? icons.alert : icons.check}<span>${rejected ? t('review.rejectedReason') : t('review.note')}</span></p>
       <p class="review-note-text">${item.reviewNote}</p>
       ${item.reviewer || item.reviewedAt ? html`<p class="review-note-meta">${item.reviewer ? item.reviewer.fullName : ''}${item.reviewedAt ? ` · ${shortDate(item.reviewedAt)}` : ''}</p>` : ''}
     </div>`;
@@ -38,7 +39,7 @@ export function reviewNoteBox(item) {
 export function contentRow(item, { href, show = [] } = {}) {
   const subject = subjectById(item.subjectId);
   const cat = categoryById(item.contentType);
-  const kind = [cat?.single?.toUpperCase(), item.week ? `WEEK ${pad2(item.week)}` : '', subject?.code].filter(Boolean).join(' · ');
+  const kind = [cat?.single?.toUpperCase(), item.week ? t('common.weekN', { n: pad2(item.week) }).toUpperCase() : '', subject?.code].filter(Boolean).join(' · ');
   const date = item.status === 'pending_review' ? item.submittedAt : (item.reviewedAt || item.updatedAt || item.createdAt);
   const inner = html`
     <span class="res-icon cat-${item.contentType}">${icons[item.contentType] || icons.file}</span>
@@ -47,10 +48,10 @@ export function contentRow(item, { href, show = [] } = {}) {
       <span class="row-title">${item.title}</span>
       <span class="row-meta">
         <span>${targetLabel(item)}</span>
-        ${show.includes('submitter') && item.submitter ? html`<span>by ${item.submitter.fullName}</span>` : ''}
+        ${show.includes('submitter') && item.submitter ? html`<span>${t('common.byName', { name: item.submitter.fullName })}</span>` : ''}
         ${date ? html`<span>${shortDate(date)}</span>` : ''}
       </span>
-      ${item.status === 'rejected' && item.reviewNote ? html`<span class="row-reason"><strong>Reason:</strong> ${item.reviewNote}</span>` : ''}
+      ${item.status === 'rejected' && item.reviewNote ? html`<span class="row-reason"><strong>${t('review.reasonLabel')}</strong> ${item.reviewNote}</span>` : ''}
     </span>
     <span class="row-status">${statusBadge(item.status)}</span>`;
   return href
@@ -63,7 +64,7 @@ export function contentRows(list, opts) {
 }
 
 export function fileLabel(file) {
-  if (!file) return 'No file attached';
+  if (!file) return t('file.none');
   return [file.name, formatBytes(file.size)].filter(Boolean).join(' · ');
 }
 
@@ -71,16 +72,16 @@ export function fileLabel(file) {
 export function itemFacts(item, { withSubmitter = true } = {}) {
   const subject = subjectById(item.subjectId);
   const facts = [
-    ['Subject', subject ? `${subject.code} — ${subject.name}` : item.subjectId || '—'],
-    ['Type', categoryById(item.contentType)?.single || item.contentType],
-    ['Week', item.week ?? '—'],
-    ['Group', item.group ?? 'All groups'],
-    ['Section', item.section ?? 'All sections'],
-    withSubmitter ? ['Submitted by', personLabel(item.submitter)] : null,
-    ['Uploaded', item.submittedAt ? shortDate(item.submittedAt) : (item.createdAt ? shortDate(item.createdAt) : '—')],
-    item.reviewedAt ? ['Reviewed', `${shortDate(item.reviewedAt)}${item.reviewer ? ` by ${item.reviewer.fullName}` : ''}`] : null,
-    item.publishedAt ? ['Published', shortDate(item.publishedAt)] : null,
-    ['File', fileLabel(item.file)],
+    [t('field.subject'), subject ? `${subject.code} — ${subject.name}` : item.subjectId || '—'],
+    [t('field.type'), categoryById(item.contentType)?.single || item.contentType],
+    [t('field.week'), item.week ?? '—'],
+    [t('field.group'), item.group ?? t('scope.allGroups')],
+    [t('field.section'), item.section ?? t('scope.allSections')],
+    withSubmitter ? [t('field.submittedBy'), personLabel(item.submitter)] : null,
+    [t('field.uploaded'), item.submittedAt ? shortDate(item.submittedAt) : (item.createdAt ? shortDate(item.createdAt) : '—')],
+    item.reviewedAt ? [t('field.reviewed'), item.reviewer ? t('common.dateByName', { date: shortDate(item.reviewedAt), name: item.reviewer.fullName }) : shortDate(item.reviewedAt)] : null,
+    item.publishedAt ? [t('field.published'), shortDate(item.publishedAt)] : null,
+    [t('field.file'), fileLabel(item.file)],
   ].filter(Boolean);
   return html`<dl class="facts">${facts.map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>`;
 }
@@ -90,7 +91,7 @@ export function statusTrack(status) {
   const order = ['draft', 'pending_review', status === 'rejected' ? 'rejected' : 'approved', 'published'];
   const at = order.indexOf(status);
   return html`
-    <ol class="track" aria-label="Workflow">
+    <ol class="track" aria-label="${t('review.workflow')}">
       ${order.map((s, i) => html`<li class="${i < at ? 'done' : ''} ${i === at ? `now tone-${statusMeta(s).tone}` : ''}" ${i === at ? html`aria-current="step"` : ''}><span class="track-dot" aria-hidden="true"></span><span>${statusMeta(s).label}</span></li>`)}
     </ol>`;
 }

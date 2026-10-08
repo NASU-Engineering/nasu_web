@@ -10,16 +10,45 @@ import { ROLES, ASSIGNABLE_ROLES, roleLabel, scopeLabel, hasRole } from '../../s
 import { consoleShell, workspaceErrorState } from '../../ui/console.js';
 import { chips, emptyState, loadingState } from '../../ui/components.js';
 import { confirmDialog, toast } from '../../ui/dialog.js';
+import { t } from '../../i18n/index.js';
 
 const ALL = '*';
 const ROLE_FILTERS = [
-  { value: '', label: 'Everyone' },
-  { value: 'section_editor', label: 'Section editors' },
-  { value: 'content_manager', label: 'Content managers' },
-  { value: 'admin', label: 'Admins' },
+  { value: '', get label() { return t('people.filter.everyone'); } },
+  { value: 'section_editor', get label() { return t('people.filter.editors'); } },
+  { value: 'content_manager', get label() { return t('people.filter.managers'); } },
+  { value: 'admin', get label() { return t('people.filter.admins'); } },
 ];
 
 export const roleBadges = roles => html`<span class="role-badges">${roles.map(r => html`<span class="role-badge role-${r}">${roleLabel(r)}</span>`)}</span>`;
+
+// What each role may do (enforced by the backend; this table only explains it).
+const PERMISSIONS = [
+  ['studentHub',  ['student', 'section_editor', 'content_manager', 'admin']],
+  ['uploadScope', ['section_editor']],
+  ['uploadAny',   ['admin']],
+  ['review',      ['content_manager', 'admin']],
+  ['publish',     ['content_manager', 'admin']],
+  ['manageRoles', ['admin']],
+  ['auditLog',    ['admin']],
+];
+const MATRIX_ROLES = ['student', 'section_editor', 'content_manager', 'admin'];
+
+export function permissionsMatrix() {
+  return html`
+    <details class="perm">
+      <summary>${icons.shield}<span>${t('people.permissionsTitle')}</span></summary>
+      <div class="table-wrap">
+        <table class="table perm-table">
+          <thead><tr><th scope="col">${t('people.permission')}</th>${MATRIX_ROLES.map(r => html`<th scope="col">${roleLabel(r)}</th>`)}</tr></thead>
+          <tbody>${PERMISSIONS.map(([key, roles]) => html`
+            <tr><th scope="row">${t(`people.perm.${key}`)}</th>${MATRIX_ROLES.map(r => html`<td data-label="${roleLabel(r)}">${roles.includes(r) ? html`<span class="perm-yes" aria-label="${t('common.yes')}">${icons.check}</span>` : html`<span class="perm-no" aria-label="${t('common.no')}">—</span>`}</td>`)}</tr>`)}
+          </tbody>
+        </table>
+      </div>
+      <p class="help-dark">${t('people.permissionsNote')}</p>
+    </details>`;
+}
 
 function memberCard(m) {
   const editor = hasRole(m.roles, 'section_editor');
@@ -28,7 +57,7 @@ function memberCard(m) {
       <header class="member-head">
         <span class="avatar avatar-sm">${icons.user}</span>
         <div class="member-id">
-          <p class="member-name">${m.fullName || 'Unnamed'}</p>
+          <p class="member-name">${m.fullName || t('common.unnamed')}</p>
           <p class="member-sub mono">${m.studentId}${m.group ? ` · ${m.group}` : ''}${m.section ? ` · ${m.section}` : ''}</p>
         </div>
         ${roleBadges(m.roles)}
@@ -37,55 +66,56 @@ function memberCard(m) {
         ${ASSIGNABLE_ROLES.map(r => hasRole(m.roles, r)
           ? html`<button type="button" class="btn btn-sm btn-quiet-danger" data-revoke="${r}">Remove ${ROLES[r].label}</button>`
           : html`<button type="button" class="btn btn-sm btn-ghost" data-grant="${r}">${icons.plus}<span>Make ${ROLES[r].label}</span></button>`)}
-        ${editor ? html`<button type="button" class="btn btn-sm btn-ghost" data-scope>Edit scope</button>` : ''}
+        ${editor ? html`<button type="button" class="btn btn-sm btn-ghost" data-scope>${t('people.editScope')}</button>` : ''}
       </div>
       ${editor ? html`
         <div class="member-scopes">
-          <p class="member-scopes-label">Upload scope</p>
+          <p class="member-scopes-label">${t('studio.scope')}</p>
           ${m.scopes.length
             ? html`<ul class="scope-list scope-list-sm">${m.scopes.map(s => html`<li><span class="mono scope-code">${subjectById(s.subjectId)?.code || s.subjectId}</span><span class="scope-target">${scopeLabel(s)}</span></li>`)}</ul>`
-            : html`<p class="help bad">No scope yet — this editor can’t upload anything until you add one.</p>`}
+            : html`<p class="help bad">${t('people.noScope')}</p>`}
         </div>
         <div class="scope-editor" hidden></div>` : ''}
     </article>`;
 }
 
 function scopeEditor(draft, groups) {
-  const groupOpts = [{ value: ALL, label: 'All groups' }, ...groups.map(g => ({ value: g.name, label: g.name }))];
+  const groupOpts = [{ value: ALL, label: t('scope.allGroups') }, ...groups.map(g => ({ value: g.name, label: g.name }))];
   return html`
-    <p class="member-scopes-label">Edit scope</p>
+    <p class="member-scopes-label">${t('people.editScope')}</p>
     ${draft.length
       ? html`<ul class="scope-list scope-list-sm">${draft.map((s, i) => html`
           <li><span class="mono scope-code">${subjectById(s.subjectId)?.code || s.subjectId}</span><span class="scope-target">${scopeLabel(s)}</span>
-          <button type="button" class="icon-btn icon-btn-sm" data-remove="${i}" aria-label="Remove this scope">${icons.close}</button></li>`)}</ul>`
-      : html`<p class="help">No scope rows. Add at least one so the editor can upload.</p>`}
+          <button type="button" class="icon-btn icon-btn-sm" data-remove="${i}" aria-label="${t('people.removeScope')}">${icons.close}</button></li>`)}</ul>`
+      : html`<p class="help">${t('people.noScopeRows')}</p>`}
     <div class="scope-add">
-      <select data-f="subject" aria-label="Subject">${SUBJECTS.map(s => html`<option value="${s.id}">${s.code} — ${s.name}</option>`)}</select>
-      <select data-f="group" aria-label="Group">${groupOpts.map(o => html`<option value="${o.value}">${o.label}</option>`)}</select>
-      <select data-f="section" aria-label="Section"><option value="${ALL}">All sections</option></select>
-      <button type="button" class="btn btn-sm btn-ghost" data-add>${icons.plus}<span>Add</span></button>
+      <select data-f="subject" aria-label="${t('field.subject')}">${SUBJECTS.map(s => html`<option value="${s.id}">${s.code} — ${s.name}</option>`)}</select>
+      <select data-f="group" aria-label="${t('field.group')}">${groupOpts.map(o => html`<option value="${o.value}">${o.label}</option>`)}</select>
+      <select data-f="section" aria-label="${t('field.section')}"><option value="${ALL}">${t('scope.allSections')}</option></select>
+      <button type="button" class="btn btn-sm btn-ghost" data-add>${icons.plus}<span>${t('common.add')}</span></button>
     </div>
     <div class="scope-foot">
-      <button type="button" class="btn btn-sm btn-quiet" data-cancel>Cancel</button>
-      <button type="button" class="btn btn-sm btn-primary" data-save>Save scope</button>
+      <button type="button" class="btn btn-sm btn-quiet" data-cancel>${t('common.cancel')}</button>
+      <button type="button" class="btn btn-sm btn-primary" data-save>${t('people.saveScope')}</button>
     </div>`;
 }
 
 export default async function adminTeam({ access, path, query }) {
   const state = { role: ROLE_FILTERS.some(r => r.value === query.role) ? query.role : '', query: query.q || '' };
   return {
-    title: 'Team & roles',
+    title: t('nav.staff'),
     html: consoleShell({
       access, path,
-      eyebrow: 'ADMIN CONTROL CENTER',
-      title: 'Team & roles',
-      lead: 'Find a student and give them a staff role. Section editors also need a scope: the subjects, groups and sections they may upload for.',
+      eyebrow: t('experience.admin'),
+      title: t('nav.people'),
+      lead: t('people.staffLead'),
       body: html`
         <form class="toolbar" id="tmForm" role="search">
-          <div class="search-box search-box-sm">${icons.search}<input type="search" name="q" value="${state.query}" placeholder="Find by name or student ID" aria-label="Find a student" autocomplete="off"></div>
+          <div class="search-box search-box-sm">${icons.search}<input type="search" name="q" value="${state.query}" placeholder="${t('people.findPlaceholder')}" aria-label="${t('people.find')}" autocomplete="off"></div>
         </form>
-        <div class="toolbar">${chips(ROLE_FILTERS, state.role, { name: 'Filter by role' })}</div>
-        <p class="notice">${icons.shield}<span>The Admin role can’t be granted here. It is managed directly by the backend owner.</span></p>
+        <div class="toolbar">${chips(ROLE_FILTERS, state.role, { name: t('filter.byRole') })}</div>
+        ${permissionsMatrix()}
+        <p class="notice">${icons.shield}<span>${t('people.adminNote')}</span></p>
         <div id="tmList" class="member-list"></div>
         <div class="load-more" id="tmMore"></div>`,
     }),
@@ -102,13 +132,13 @@ export default async function adminTeam({ access, path, query }) {
         const p = new URLSearchParams();
         if (state.query) p.set('q', state.query);
         if (state.role) p.set('role', state.role);
-        history.replaceState(null, '', `#/admin/team${p.toString() ? `?${p}` : ''}`);
+        history.replaceState(null, '', `#/admin/people/staff${p.toString() ? `?${p}` : ''}`);
       };
 
       const draw = () => {
         mount(listEl, members.length ? members.map(memberCard)
-          : emptyState(state.query ? 'No one matches' : 'No one here yet', state.query ? 'Check the spelling or student ID.' : 'Try “Everyone” and search for a student.'));
-        mount(moreEl, cursor ? html`<button type="button" class="btn btn-ghost">Load more</button>` : '');
+          : emptyState(state.query ? t('people.noMatch') : t('people.noneYet'), state.query ? t('people.checkSpelling') : t('people.tryEveryone')));
+        mount(moreEl, cursor ? html`<button type="button" class="btn btn-ghost">${t('common.loadMore')}</button>` : '');
         moreEl.querySelector('button')?.addEventListener('click', () => load(true));
       };
 
@@ -124,7 +154,7 @@ export default async function adminTeam({ access, path, query }) {
           draw();
         } catch (err) {
           if (mine !== seq) return;
-          mount(listEl, workspaceErrorState(err, 'Team management'));
+          mount(listEl, workspaceErrorState(err));
           mount(moreEl, '');
           listEl.querySelector('[data-action=retry]')?.addEventListener('click', () => load());
         }
@@ -148,16 +178,16 @@ export default async function adminTeam({ access, path, query }) {
           const role = grant || revoke;
           let updated;
           const { confirmed } = await confirmDialog({
-            title: grant ? `Make ${m.fullName} a ${roleLabel(role)}?` : `Remove ${roleLabel(role)} from ${m.fullName}?`,
+            title: grant ? t('people.grantTitle', { name: m.fullName, role: roleLabel(role) }) : t('people.revokeTitle', { name: m.fullName, role: roleLabel(role) }),
             body: grant
-              ? html`<p>${role === 'section_editor' ? 'They’ll be able to upload drafts for the scope you set next. Nothing is published without review.' : 'They’ll be able to approve, reject and publish submissions from every editor.'}</p>`
-              : html`<p>${role === 'section_editor' ? 'Their upload scope is removed too. Items they already submitted stay as they are.' : 'They’ll lose access to the review queue.'}</p>`,
+              ? html`<p>${role === 'section_editor' ? t('people.grantEditorText') : t('people.grantManagerText')}</p>`
+              : html`<p>${role === 'section_editor' ? t('people.revokeEditorText') : t('people.revokeManagerText')}</p>`,
             tone: grant ? 'default' : 'danger',
-            confirmLabel: grant ? 'Grant role' : 'Remove role',
+            confirmLabel: grant ? t('people.grant') : t('people.revoke'),
             run: async () => { updated = await (grant ? api.admin.grantRole(m.userId, role) : api.admin.revokeRole(m.userId, role)); },
           });
           if (confirmed) {
-            toast(grant ? `${roleLabel(role)} role granted` : `${roleLabel(role)} role removed`);
+            toast(grant ? t('people.granted', { role: roleLabel(role) }) : t('people.revoked', { role: roleLabel(role) }));
             if (updated) replace(updated); else load();
           }
           return;
@@ -179,7 +209,7 @@ export default async function adminTeam({ access, path, query }) {
           const sec = box.querySelector('[data-f=section]');
           const syncSections = () => {
             const known = groups.find(x => x.name === g.value)?.sections || [];
-            mount(sec, [html`<option value="${ALL}">All sections</option>`, ...known.map(n => html`<option value="${n}">${n}</option>`)]);
+            mount(sec, [html`<option value="${ALL}">${t('scope.allSections')}</option>`, ...known.map(n => html`<option value="${n}">${n}</option>`)]);
             sec.disabled = g.value === ALL;
           };
           g.addEventListener('change', syncSections);
@@ -202,21 +232,21 @@ export default async function adminTeam({ access, path, query }) {
           if (e.target.closest('[data-save]')) {
             let updated;
             const { confirmed } = await confirmDialog({
-              title: `Save scope for ${m.fullName}?`,
+              title: t('people.saveScopeTitle', { name: m.fullName }),
               body: draft.length
-                ? html`<p>They’ll be able to upload for:</p><ul class="dlg-list">${draft.map(s => html`<li><strong>${subjectById(s.subjectId)?.code}</strong> — ${scopeLabel(s)}</li>`)}</ul>`
-                : html`<p>With no scope rows they won’t be able to upload anything.</p>`,
-              confirmLabel: 'Save scope',
+                ? html`<p>${t('people.scopeWillAllow')}</p><ul class="dlg-list">${draft.map(s => html`<li><strong>${subjectById(s.subjectId)?.code}</strong> — ${scopeLabel(s)}</li>`)}</ul>`
+                : html`<p>${t('people.scopeEmptyWarn')}</p>`,
+              confirmLabel: t('people.saveScope'),
               run: async () => { updated = await api.admin.setEditorScopes(m.userId, draft); },
             });
-            if (confirmed) { toast('Scope saved'); if (updated) replace(updated); else load(); }
+            if (confirmed) { toast(t('people.scopeSaved')); if (updated) replace(updated); else load(); }
           }
         };
       }
 
-      let t;
-      form.q.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { state.query = form.q.value.trim(); load(); }, 250); });
-      form.addEventListener('submit', e => { e.preventDefault(); clearTimeout(t); state.query = form.q.value.trim(); load(); });
+      let timer;
+      form.q.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => { state.query = form.q.value.trim(); load(); }, 250); });
+      form.addEventListener('submit', e => { e.preventDefault(); clearTimeout(timer); state.query = form.q.value.trim(); load(); });
       root.querySelectorAll('.chip').forEach(btn => btn.addEventListener('click', () => {
         state.role = btn.dataset.value;
         root.querySelectorAll('.chip').forEach(b => { b.classList.toggle('on', b === btn); b.setAttribute('aria-pressed', String(b === btn)); });

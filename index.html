@@ -8,8 +8,23 @@
 <title>NASU Freshmen Hub</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/styles.css">
+<script>
+/* Saved language and theme before first paint (no flash). Mirrors i18n/index.js and ui/theme.js. */
+(function () {
+  var d = document.documentElement, lang = null, theme = null;
+  try { lang = localStorage.getItem('nasu.lang'); theme = localStorage.getItem('nasu.theme'); } catch (e) {}
+  if (lang !== 'en' && lang !== 'ar') {
+    var langs = navigator.languages || [navigator.language || ''];
+    lang = 'en';
+    for (var i = 0; i < langs.length; i++) { var b = String(langs[i] || '').toLowerCase().split('-')[0]; if (b === 'en' || b === 'ar') { lang = b; break; } }
+  }
+  d.lang = lang; d.dir = lang === 'ar' ? 'rtl' : 'ltr';
+  if (['dark', 'light', 'contrast', 'warm'].indexOf(theme) < 0) theme = window.matchMedia && !matchMedia('(prefers-color-scheme: dark)').matches ? 'light' : 'dark';
+  d.setAttribute('data-theme', theme);
+})();
+</script>
 </head>
 <body>
 <a class="skip-link" href="#app">Skip to content</a>

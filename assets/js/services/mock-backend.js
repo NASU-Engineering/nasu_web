@@ -187,3 +187,7 @@ export async function listAnnouncements({ subjectId, limit } = {}) {
 /* ---------- staff workspaces (mock) ---------- */
 
 export * from './mock-workspace.js';
+
+/* ---------- engagement (mock) ---------- */
+
+export * from './mock-engage.js';

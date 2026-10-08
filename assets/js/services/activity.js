@@ -6,20 +6,22 @@
 // invent data. Auth events and presence are not collected by the backend yet
 // (proposal: docs/ACTIVITY_MONITORING.md).
 
+import { t } from '../i18n/index.js';
+
 // `collected: false` = no source exists yet; shown as "Not collected" unless the
 // audit log turns out to contain matching actions.
 export const TRACKED_EVENTS = [
-  { id: 'auth.sign_in',      label: 'Successful sign-in',          match: /^(auth|session)\.(sign_?in|login)/i, collected: false },
-  { id: 'auth.sign_out',     label: 'Sign-out / session end',      match: /^(auth|session)\.(sign_?out|logout|end|expired)/i, collected: false },
-  { id: 'content.created',   label: 'Content created',             match: /^content\.(created|draft)/i },
-  { id: 'content.file',      label: 'File uploaded',               match: /(upload|file)/i },
-  { id: 'content.submitted', label: 'Submitted for review',        match: /^content\.submit/i },
-  { id: 'content.approved',  label: 'Approved',                    match: /^content\.approv/i },
-  { id: 'content.rejected',  label: 'Rejected',                    match: /^content\.reject/i },
-  { id: 'content.published', label: 'Published',                   match: /^content\.publish/i },
-  { id: 'role.changed',      label: 'Role granted or revoked',     match: /^role\./i },
-  { id: 'scope.changed',     label: 'Editor scope changed',        match: /^scope\./i },
-  { id: 'presence',          label: 'Online presence (heartbeat)', match: /^presence\./i, collected: false },
+  { id: 'auth.sign_in', get label() { return t('event.auth_sign_in'); },          match: /^(auth|session)\.(sign_?in|login)/i, collected: false },
+  { id: 'auth.sign_out', get label() { return t('event.auth_sign_out'); },      match: /^(auth|session)\.(sign_?out|logout|end|expired)/i, collected: false },
+  { id: 'content.created', get label() { return t('event.content_created'); },             match: /^content\.(created|draft)/i },
+  { id: 'content.file', get label() { return t('event.content_file'); },               match: /(upload|file)/i },
+  { id: 'content.submitted', get label() { return t('event.content_submitted'); },        match: /^content\.submit/i },
+  { id: 'content.approved', get label() { return t('event.content_approved'); },                    match: /^content\.approv/i },
+  { id: 'content.rejected', get label() { return t('event.content_rejected'); },                    match: /^content\.reject/i },
+  { id: 'content.published', get label() { return t('event.content_published'); },                   match: /^content\.publish/i },
+  { id: 'role.changed', get label() { return t('event.role_changed'); },     match: /^role\./i },
+  { id: 'scope.changed', get label() { return t('event.scope_changed'); },        match: /^scope\./i },
+  { id: 'presence', get label() { return t('event.presence'); }, match: /^presence\./i, collected: false },
 ];
 
 /**

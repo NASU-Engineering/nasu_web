@@ -5,6 +5,7 @@ import { canSubmit, isEditable } from '../../services/content-workflow.js';
 import { consoleShell, panel } from '../../ui/console.js';
 import { statusBadge, statusTrack, reviewNoteBox, itemFacts } from '../../ui/workflow.js';
 import { confirmDialog, toast } from '../../ui/dialog.js';
+import { t } from '../../i18n/index.js';
 
 export default async function editorItem({ access, path, params, reload }) {
   const item = await api.editor.get(params.id);
@@ -14,30 +15,30 @@ export default async function editorItem({ access, path, params, reload }) {
     title: item.title,
     html: consoleShell({
       access, path,
-      eyebrow: 'CONTENT STUDIO',
+      eyebrow: t('experience.editor'),
       title: item.title,
       actions: html`
-        ${isEditable(item.status) ? html`<a class="btn btn-ghost" href="${editHref}">Edit</a>` : ''}
-        ${canSubmit(item.status) ? html`<button type="button" class="btn btn-primary" id="submitBtn" ${item.file ? '' : 'disabled'} title="${item.file ? '' : 'Attach a file first'}">Submit for review</button>` : ''}`,
+        ${isEditable(item.status) ? html`<a class="btn btn-ghost" href="${editHref}">${t('common.edit')}</a>` : ''}
+        ${canSubmit(item.status) ? html`<button type="button" class="btn btn-primary" id="submitBtn" ${item.file ? '' : 'disabled'} title="${item.file ? '' : t('studio.attachFirst')}">${t('studio.submit')}</button>` : ''}`,
       body: html`
-        <a class="back-link" href="#/editor/uploads">${icons.back}<span>My content</span></a>
+        <a class="back-link" href="#/editor/uploads">${icons.back}<span>${t('nav.myContent')}</span></a>
         <div class="item-status">${statusBadge(item.status)}${statusTrack(item.status)}</div>
         ${reviewNoteBox(item)}
         <div class="console-cols">
-          ${panel('Details', itemFacts(item, { withSubmitter: false }))}
-          ${panel('Description', item.description ? html`<p class="prose">${item.description}</p>` : html`<p class="muted">No description.</p>`)}
+          ${panel(t('common.details'), itemFacts(item, { withSubmitter: false }))}
+          ${panel(t('field.description'), item.description ? html`<p class="prose">${item.description}</p>` : html`<p class="muted">${t('common.noDescription')}</p>`)}
         </div>
-        ${item.status === 'pending_review' ? html`<p class="notice">${icons.clock}<span>Waiting for a content manager. You’ll see the decision here.</span></p>` : ''}`,
+        ${item.status === 'pending_review' ? html`<p class="notice">${icons.clock}<span>${t('studio.waiting')}</span></p>` : ''}`,
     }),
     bind(root) {
       root.querySelector('#submitBtn')?.addEventListener('click', async () => {
         const { confirmed } = await confirmDialog({
-          title: 'Submit for review?',
-          body: html`<p>“${item.title}” goes to the review queue. You can’t edit it while it’s being reviewed.</p>`,
-          confirmLabel: 'Submit for review',
+          title: t('studio.submitTitle'),
+          body: html`<p>${t('studio.submitText', { title: item.title })}</p>`,
+          confirmLabel: t('studio.submit'),
           run: () => api.editor.submit(item.id),
         });
-        if (confirmed) { toast('Submitted for review'); reload(); }
+        if (confirmed) { toast(t('studio.submitted')); reload(); }
       });
     },
   };

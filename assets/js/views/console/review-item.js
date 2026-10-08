@@ -8,6 +8,7 @@ import { consoleShell, panel } from '../../ui/console.js';
 import { statusBadge, statusTrack, reviewNoteBox, itemFacts, fileLabel } from '../../ui/workflow.js';
 import { formError, showFormError } from '../../ui/components.js';
 import { confirmDialog, toast } from '../../ui/dialog.js';
+import { t } from '../../i18n/index.js';
 
 export default async function reviewItem({ access, path, params, reload }) {
   const item = await api.review.get(params.id);
@@ -15,29 +16,29 @@ export default async function reviewItem({ access, path, params, reload }) {
   const publish = canPublish(item.status);
   // Opened from the Admin Control Center (/admin/content/:id) it stays in that shell.
   const inAdmin = path.startsWith('/admin');
-  const back = inAdmin ? { href: '/admin/content', label: 'Content' }
-    : decide ? { href: '/review', label: 'Review queue' } : { href: '/review/processed', label: 'Processed' };
+  const back = inAdmin ? { href: '/admin/content', label: t('nav.content') }
+    : decide ? { href: '/review', label: t('nav.reviewQueue') } : { href: '/review/history', label: t('nav.reviewHistory') };
 
-  const decisionPanel = decide ? panel('Decision', html`
+  const decisionPanel = decide ? panel(t('review.decision'), html`
     <div class="field field-dark">
-      <label for="rvNote">Review note</label>
-      <textarea id="rvNote" rows="4" maxlength="1000" placeholder="Required when rejecting — tell the editor exactly what to fix."></textarea>
-      <p class="help">Optional for approval. The editor sees this note.</p>
+      <label for="rvNote">${t('review.note')}</label>
+      <textarea id="rvNote" rows="4" maxlength="1000" placeholder="${t('review.notePlaceholder')}"></textarea>
+      <p class="help">${t('review.noteHelp')}</p>
     </div>
     ${formError('rvError')}
     <div class="decision-actions">
-      <button type="button" class="btn btn-danger" id="rejectBtn">${icons.close}<span>Reject</span></button>
-      <button type="button" class="btn btn-approve" id="approveBtn">${icons.check}<span>Approve</span></button>
-    </div>`) : publish ? panel('Publish', html`
-    <p class="muted">Approved. Publishing makes it visible to students in the selected group and section.</p>
+      <button type="button" class="btn btn-danger" id="rejectBtn">${icons.close}<span>${t('review.reject')}</span></button>
+      <button type="button" class="btn btn-approve" id="approveBtn">${icons.check}<span>${t('review.approve')}</span></button>
+    </div>`) : publish ? panel(t('review.publish'), html`
+    <p class="muted">${t('review.publishText')}</p>
     ${formError('rvError')}
-    <div class="decision-actions"><button type="button" class="btn btn-primary" id="publishBtn">Publish</button></div>`) : '';
+    <div class="decision-actions"><button type="button" class="btn btn-primary" id="publishBtn">${t('review.publish')}</button></div>`) : '';
 
   return {
-    title: `Review: ${item.title}`,
+    title: t('review.pageTitle', { title: item.title }),
     html: consoleShell({
       access, path,
-      eyebrow: inAdmin ? 'ADMIN CONTROL CENTER' : 'REVIEW DESK',
+      eyebrow: inAdmin ? t('experience.admin') : t('experience.review'),
       title: item.title,
       body: html`
         <a class="back-link" href="#${back.href}">${icons.back}<span>${back.label}</span></a>
@@ -45,14 +46,14 @@ export default async function reviewItem({ access, path, params, reload }) {
         ${reviewNoteBox(item)}
         <div class="console-cols">
           <div>
-            ${panel('Submission', itemFacts(item))}
-            ${panel('Description', item.description ? html`<p class="prose">${item.description}</p>` : html`<p class="muted">No description.</p>`)}
+            ${panel(t('review.submission'), itemFacts(item))}
+            ${panel(t('field.description'), item.description ? html`<p class="prose">${item.description}</p>` : html`<p class="muted">${t('common.noDescription')}</p>`)}
           </div>
           <div>
-            ${panel('File', html`
+            ${panel(t('field.file'), html`
               <p class="file-line">${icons.file}<span>${fileLabel(item.file)}</span></p>
-              <button type="button" class="btn btn-ghost" id="openFile" ${item.file ? '' : 'disabled'}>${icons.eye}<span>Preview / open file</span></button>
-              ${item.externalUrl ? html`<a class="btn btn-ghost" href="${item.externalUrl}" target="_blank" rel="noopener noreferrer">${icons.link}<span>Open external link</span></a>` : ''}
+              <button type="button" class="btn btn-ghost" id="openFile" ${item.file ? '' : 'disabled'}>${icons.eye}<span>${t('review.openFile')}</span></button>
+              ${item.externalUrl ? html`<a class="btn btn-ghost" href="${item.externalUrl}" target="_blank" rel="noopener noreferrer">${icons.link}<span>${t('review.openExternal')}</span></a>` : ''}
               <p class="help" id="fileMsg" role="status"></p>`)}
             ${decisionPanel}
           </div>
@@ -68,7 +69,7 @@ export default async function reviewItem({ access, path, params, reload }) {
         // Open the tab synchronously (popup blockers), then point it at the signed URL.
         const win = window.open('', '_blank');
         btn.disabled = true;
-        msg.textContent = 'Getting a secure link…';
+        msg.textContent = t('review.gettingLink');
         try {
           const url = await api.review.getFileUrl(item);
           if (win) { win.opener = null; win.location.href = url; } else location.assign(url);
@@ -87,35 +88,35 @@ export default async function reviewItem({ access, path, params, reload }) {
         if (!check.ok) return showFormError(err, check.error);
         showFormError(err, '');
         const { confirmed } = await confirmDialog({
-          title: 'Approve this submission?',
-          body: html`<p>“${item.title}” will be marked approved and can then be published to students.</p>`,
-          confirmLabel: 'Approve',
+          title: t('review.approveTitle'),
+          body: html`<p>${t('review.approveText', { title: item.title })}</p>`,
+          confirmLabel: t('review.approve'),
           run: () => api.review.approve(item.id, { note: text }),
         });
-        if (confirmed) { toast('Approved'); reload(); }
+        if (confirmed) { toast(t('status.approved')); reload(); }
       });
 
       root.querySelector('#rejectBtn')?.addEventListener('click', async () => {
         showFormError(err, '');
         const { confirmed } = await confirmDialog({
-          title: 'Reject this submission?',
-          body: html`<p>The editor will see your reason and can fix and resubmit “${item.title}”.</p>`,
+          title: t('review.rejectTitle'),
+          body: html`<p>${t('review.rejectText', { title: item.title })}</p>`,
           tone: 'danger',
-          confirmLabel: 'Reject',
-          input: { label: 'Reason for rejection', value: note.value.trim(), required: true, minLength: MIN_REASON_LENGTH, placeholder: 'What needs to change?', help: 'Shown to the editor.' },
+          confirmLabel: t('review.reject'),
+          input: { label: t('review.reasonFor'), value: note.value.trim(), required: true, minLength: MIN_REASON_LENGTH, placeholder: t('review.reasonPlaceholder'), help: t('review.reasonHelp') },
           run: reason => api.review.reject(item.id, { reason }),
         });
-        if (confirmed) { toast('Rejected — the editor has been given your reason'); reload(); }
+        if (confirmed) { toast(t('review.rejectedToast')); reload(); }
       });
 
       root.querySelector('#publishBtn')?.addEventListener('click', async () => {
         const { confirmed } = await confirmDialog({
-          title: 'Publish to students?',
-          body: html`<p>“${item.title}” becomes visible to students in its group and section.</p>`,
-          confirmLabel: 'Publish',
+          title: t('review.publishTitle'),
+          body: html`<p>${t('review.publishConfirm', { title: item.title })}</p>`,
+          confirmLabel: t('review.publish'),
           run: () => api.review.publish(item.id),
         });
-        if (confirmed) { toast('Published'); reload(); }
+        if (confirmed) { toast(t('status.published')); reload(); }
       });
     },
   };

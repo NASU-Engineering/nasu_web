@@ -156,3 +156,7 @@ export async function listAnnouncements(opts) {
 // Roles, editor uploads, review queue and admin — see supabase-workspace.js.
 
 export * from './supabase-workspace.js';
+
+/* ---------- engagement (not live yet) ---------- */
+
+export * from './supabase-engage.js';

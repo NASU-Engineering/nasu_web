@@ -6,15 +6,16 @@
 import { html, mount } from './html.js';
 import { icons } from './icons.js';
 import { loadingState } from './components.js';
-import { experienceForPath, experienceById, navFor, activeHref } from '../services/experiences.js';
+import { experienceForPath, experienceById, navFor, subnavFor, activeHref } from '../services/experiences.js';
 import { isSimulating } from '../services/simulator.js';
+import { t } from '../i18n/index.js';
 
 export function consoleShell({ path, eyebrow, title, lead, actions = '', body }) {
   const exp = experienceById(experienceForPath(path));
-  const items = navFor(exp.id, { simulating: isSimulating() });
-  const main = items.filter(i => !i.planned);
-  const planned = items.filter(i => i.planned);
+  const items = navFor(exp.id);
   const active = activeHref(items, path);
+  const sub = subnavFor(path, { simulating: isSimulating() });
+  const subActive = activeHref(sub, path);
   const link = item => html`
     <a href="#${item.href}" class="${item.href === active ? 'active' : ''}" ${item.href === active ? html`aria-current="page"` : ''}>
       ${icons[item.icon] || icons.chevron}<span>${item.label}</span>
@@ -24,15 +25,10 @@ export function consoleShell({ path, eyebrow, title, lead, actions = '', body })
     <div class="console console-${exp.id}">
       <aside class="console-nav" aria-label="${exp.label}">
         <p class="console-title">${icons[exp.icon]}<span>${exp.label}</span></p>
-        <div class="console-group">${main.map(link)}</div>
-        ${planned.length ? html`
-          <div class="console-group">
-            <p class="console-group-label">Planned modules</p>
-            ${planned.map(link)}
-          </div>` : ''}
+        <div class="console-group">${items.map(link)}</div>
       </aside>
-      <nav class="console-tabs" aria-label="${exp.label} sections">
-        ${main.map(item => html`<a href="#${item.href}" class="${item.href === active ? 'active' : ''}" ${item.href === active ? html`aria-current="page"` : ''}>${item.label}</a>`)}
+      <nav class="console-tabs" aria-label="${t('nav.sectionsOf', { name: exp.label })}">
+        ${items.map(item => html`<a href="#${item.href}" class="${item.href === active ? 'active' : ''}" ${item.href === active ? html`aria-current="page"` : ''}>${item.label}</a>`)}
       </nav>
       <div class="console-main">
         <div class="console-head">
@@ -43,6 +39,10 @@ export function consoleShell({ path, eyebrow, title, lead, actions = '', body })
           </div>
           ${actions ? html`<div class="console-actions">${actions}</div>` : ''}
         </div>
+        ${sub.length > 1 ? html`
+          <nav class="subnav" aria-label="${t('nav.inPage')}">
+            ${sub.map(i => html`<a href="#${i.href}" class="${i.href === subActive ? 'active' : ''}" ${i.href === subActive ? html`aria-current="page"` : ''}>${icons[i.icon]}<span>${i.label}</span></a>`)}
+          </nav>` : ''}
         ${body}
       </div>
     </div>`;
@@ -52,7 +52,7 @@ export function statTile({ label, value, hint, href, icon }) {
   const inner = html`
     <span class="stat-top">${icon ? icons[icon] : ''}<span class="stat-label">${label}</span></span>
     <span class="stat-value mono">${value == null ? '—' : value}</span>
-    <span class="stat-hint">${value == null ? (hint || 'Not available yet') : (hint || '')}</span>`;
+    <span class="stat-hint">${value == null ? (hint || t('state.notAvailable')) : (hint || '')}</span>`;
   return href ? html`<a class="stat" href="${href}">${inner}</a>` : html`<div class="stat">${inner}</div>`;
 }
 
@@ -66,11 +66,20 @@ export function panel(title, body, { action = '', id = '' } = {}) {
 }
 
 /** State shown when a backend feature isn't connected yet — calm, not an error. */
-export function pendingBackendState(what = 'This section') {
+export function pendingBackendState() {
   return html`
     <div class="state state-pending">
-      <p class="state-title">${what} isn’t connected yet</p>
-      <p class="state-text">The screen is ready; it will fill in once the backend for it is switched on.</p>
+      <p class="state-title">${t('state.notConnected')}</p>
+      <p class="state-text">${t('state.notConnectedText')}</p>
+    </div>`;
+}
+
+/** Features whose backend doesn't exist yet (quizzes, activities, XP): say so plainly. */
+export function notLiveState(feature) {
+  return html`
+    <div class="state state-pending">
+      <p class="state-title">${t('state.notLive', { feature })}</p>
+      <p class="state-text">${t('state.notLiveText')}</p>
     </div>`;
 }
 
@@ -80,7 +89,7 @@ export function futureModule({ icon, title, text, points = [] }) {
     <div class="future">
       <span class="future-icon">${icons[icon] || icons.grid}</span>
       <div>
-        <p class="future-badge mono">PLANNED MODULE</p>
+        <p class="future-badge mono">${t('state.plannedModule')}</p>
         <h2 class="future-title">${title}</h2>
         <p class="future-text">${text}</p>
         ${points.length ? html`<ul class="future-list">${points.map(p => html`<li>${p}</li>`)}</ul>` : ''}
@@ -90,12 +99,12 @@ export function futureModule({ icon, title, text, points = [] }) {
 
 /** Error/empty handling shared by console panels. */
 export function workspaceErrorState(err, what) {
-  if (err?.code === 'backend_required') return pendingBackendState(what);
+  if (err?.code === 'backend_required') return pendingBackendState();
   return html`
     <div class="state state-error" role="alert">
-      <p class="state-title">${err?.code === 'forbidden' ? 'Not allowed' : 'Couldn’t load this'}</p>
-      <p class="state-text">${err?.message || 'Something went wrong.'}</p>
-      ${err?.code === 'forbidden' ? '' : html`<button type="button" class="btn btn-ghost" data-action="retry">Try again</button>`}
+      <p class="state-title">${err?.code === 'forbidden' ? t('state.notAllowed') : t('state.loadFailed')}</p>
+      <p class="state-text">${err?.message || t('error.unknown')}</p>
+      ${err?.code === 'forbidden' ? '' : html`<button type="button" class="btn btn-ghost" data-action="retry">${t('common.tryAgain')}</button>`}
     </div>`;
 }
 

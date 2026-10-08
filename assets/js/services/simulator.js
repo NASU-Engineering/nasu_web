@@ -8,6 +8,8 @@
 // Entering requires the backend to have reported the admin role for the real
 // account (canUseSimulator). Exiting is always allowed.
 
+import { t } from '../i18n/index.js';
+
 import { hasRole } from './roles.js';
 
 const KEY = 'nasu.sim';
@@ -16,28 +18,24 @@ const KEY = 'nasu.sim';
 // section the sample editor scope targets, so Editor → Reviewer → Student works.
 export const PERSONAS = {
   student: {
-    id: 'student', label: 'Student', experience: 'student', home: '/dashboard',
+    id: 'student', get label() { return t('persona.student.label'); }, get text() { return t('persona.student.text'); }, experience: 'student', home: '/dashboard',
     roles: ['student'],
     person: { userId: 'mock-student', fullName: 'Sim Student', studentId: 'sim.student', group: 'Group A (sample)', section: 'Section 1' },
-    text: 'Prep-year student: subjects, search, updates and published content for their group and section.',
   },
   editor: {
-    id: 'editor', label: 'Section Editor', experience: 'editor', home: '/editor',
+    id: 'editor', get label() { return t('persona.editor.label'); }, get text() { return t('persona.editor.text'); }, experience: 'editor', home: '/editor',
     roles: ['student', 'section_editor'],
     person: { userId: 'mock-user-0', fullName: 'Demo Student', studentId: 'demo.student', group: 'Group A (sample)', section: 'Section 1' },
-    text: 'Uploads drafts for Mathematics I and Statics (Group A) and submits them for review.',
   },
   reviewer: {
-    id: 'reviewer', label: 'Content Reviewer', experience: 'review', home: '/review',
+    id: 'reviewer', get label() { return t('persona.reviewer.label'); }, get text() { return t('persona.reviewer.text'); }, experience: 'review', home: '/review',
     roles: ['student', 'content_manager'],
     person: { userId: 'mock-user-3', fullName: 'Sample Student 03', studentId: 'sample-0003', group: 'Group B (sample)', section: 'Section 4' },
-    text: 'Previews pending submissions, approves or rejects them with a note, and publishes approved content.',
   },
   admin: {
-    id: 'admin', label: 'Admin', experience: 'admin', home: '/admin',
+    id: 'admin', get label() { return t('persona.admin.label'); }, get text() { return t('persona.admin.text'); }, experience: 'admin', home: '/admin',
     roles: ['student', 'admin'],
     person: { userId: 'mock-user-1', fullName: 'Sample Student 01', studentId: 'sample-0001', group: 'Group A (sample)', section: 'Section 2' },
-    text: 'The Admin Control Center over mock data: students, staff & roles, content, audit log.',
   },
 };
 

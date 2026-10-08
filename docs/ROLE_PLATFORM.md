@@ -6,10 +6,54 @@ decides what is **allowed**.
 
 | Experience | Who | Home | Navigation |
 |---|---|---|---|
-| **Student Hub** | everyone with a hub profile | `/dashboard` | Home · Subjects · Search · Updates · Profile |
-| **Content Studio** | `section_editor`, `admin` | `/editor` | Overview · Upload · My content · Drafts |
-| **Review Desk** | `content_manager`, `admin` | `/review` | Review queue · Processed · History |
-| **Admin Control Center** | `admin` | `/admin` | Overview · Students · Staff & roles · Content · Review activity · Audit log · Analytics · Role simulator (+ planned: Activities, Quizzes, Leaderboards) |
+| **Student Hub** | everyone with a hub profile | `/dashboard` | Home · Learn · Updates · Progress · Profile |
+| **Content Studio** | `section_editor`, `admin` | `/editor` | Overview · Upload · My content (status filters) |
+| **Review Desk** | `content_manager`, `admin` | `/review` | Review queue · History |
+| **Admin Control Center** | `admin` | `/admin` | Overview · People · Content · Insights · Settings |
+
+**Roles are permissions, not identities.** Every account with a hub profile keeps
+the Student Hub; each staff role adds a workspace. An editor who is also a
+reviewer gets Student Hub + Content Studio + Review Desk; an admin gets all four.
+
+## Information architecture
+
+**Student Hub** — five destinations (top nav on desktop, bottom bar on phones):
+
+| Destination | Contains |
+|---|---|
+| Home | greeting, progress card (when engagement is live), deadlines, subjects, latest updates |
+| Learn | Subjects → subject pages, Resources (search + type filters), Assignments |
+| Updates | the updates feed with kind filters and deep links |
+| Progress | XP, level, ranks → Quizzes, Activities, Leaderboard |
+| Profile | details, Settings (language, theme), sign out |
+
+**Admin Control Center** — five destinations; related pages are in-page section
+tabs (`SUBNAV`), not extra top-level items:
+
+| Destination | Sections |
+|---|---|
+| Overview | platform status (Live / Sample / Not collected), metrics, pending decisions, recent activity |
+| People | Students · Staff & roles (roles, scopes, permission matrix) |
+| Content | Library · Review queue · Quizzes · Activities |
+| Insights | Analytics · Engagement · Review activity · Audit log |
+| Settings | Platform (read-only configuration and feature status) · Role simulator |
+
+Old addresses (`/admin/team`, `/admin/audit`, `/review/processed`, `/editor/drafts`, …)
+redirect to their new homes (`REDIRECTS`), so bookmarks keep working.
+
+## Language and themes
+
+- **English and Arabic** (`assets/js/i18n/`): flat catalogs with identical keys
+  (tested), `t(key, params)` with `Intl.PluralRules` (Arabic uses all six plural
+  forms) and Latin digits (`ar-EG-u-nu-latn`). The choice is saved per browser
+  (`nasu.lang`); default = saved choice → browser language → English. Arabic sets
+  `dir="rtl"`; the stylesheet uses logical properties, mirrors directional icons,
+  disables letter-spacing/uppercase for Arabic and uses IBM Plex Sans Arabic.
+- **Themes** (`assets/js/ui/theme.js`): System, Dark, Light, High contrast, Warm
+  paper — all from CSS tokens on `html[data-theme]`, saved per browser
+  (`nasu.theme`). `index.html` applies the saved language and theme before first
+  paint.
+- Both live in Settings (the gear in every top bar, and Profile → Settings).
 
 Source of truth: `assets/js/services/experiences.js` (pure, tested in
 `tests/experiences.test.mjs`).
@@ -66,6 +110,13 @@ latest ≤150 audit-log entries) or **Not collected** (no source yet):
 - Sign-in, sign-out/session and online presence — **Not collected**. The UI never
   claims who is online. Proposal: `docs/ACTIVITY_MONITORING.md`.
 
+## Engagement (Quizzes, Activities, XP, Leaderboards)
+
+Designed and running on mock data in the preview. The production adapter
+(`supabase-engage.js`) answers `backend_required` and the UI says "not live yet"
+— nothing is presented as live. Rules and the server-authoritative schema
+proposal: `docs/ENGAGEMENT.md`.
+
 ## Backend requirements needing separate approval
 
 None of these are implemented or applied. Each needs backend-owner approval.
@@ -88,6 +139,9 @@ None of these are implemented or applied. Each needs backend-owner approval.
 6. **Server-side admin filters** (optional) — `admin_list_content` subject/text
    filters and `admin_search_members` role filter / cursor (the UI filters the
    loaded page today).
+7. **Engagement backend** — tables, RPCs and RLS proposed in `docs/ENGAGEMENT.md`.
+8. **WhatsApp phone data** — reviewed, reversible backfill and type change in
+   `docs/data-integrity/README.md` (not applied).
 
 ## Existing Student Information Form (`NASU-Engineering/nasu_student`)
 

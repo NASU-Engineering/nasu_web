@@ -1,0 +1,5 @@
+
+# Reconciliation inputs/outputs contain private student data — never commit.
+tools/reconcile/data/
+tools/reconcile/out/
+*.private.csv

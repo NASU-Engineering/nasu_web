@@ -1,32 +1,50 @@
-const dateFmt = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' });
-const dateYearFmt = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+// Dates, times and relative days in the current language (Intl, cached per locale).
+
+import { t, intlLocale } from '../i18n/index.js';
+
+const cache = new Map();
+function fmt(kind, options) {
+  const key = `${intlLocale()}|${kind}`;
+  if (!cache.has(key)) cache.set(key, new Intl.DateTimeFormat(intlLocale(), options));
+  return cache.get(key);
+}
+
+const dayDiff = iso => Math.round((new Date(iso).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 864e5);
 
 export function shortDate(iso) {
   if (!iso) return '';
   const d = new Date(iso);
   if (isNaN(d)) return '';
-  return (d.getFullYear() === new Date().getFullYear() ? dateFmt : dateYearFmt).format(d);
+  return d.getFullYear() === new Date().getFullYear()
+    ? fmt('dm', { day: 'numeric', month: 'short' }).format(d)
+    : fmt('dmy', { day: 'numeric', month: 'short', year: 'numeric' }).format(d);
 }
 
 export function relativeDays(iso) {
   if (!iso) return '';
-  const days = Math.round((new Date(iso).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 864e5);
-  if (days === 0) return 'today';
-  if (days === 1) return 'tomorrow';
-  if (days === -1) return 'yesterday';
-  return days > 0 ? `in ${days} days` : `${-days} days ago`;
+  const days = dayDiff(iso);
+  if (days === 0) return t('time.today');
+  if (days === 1) return t('time.tomorrow');
+  if (days === -1) return t('time.yesterday');
+  return days > 0 ? t('time.inDays', { count: days }) : t('time.daysAgo', { count: -days });
 }
 
 export const pad2 = n => String(n).padStart(2, '0');
 
-const timeFmt = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' });
+export const timeOfDay = iso => fmt('hm', { hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
 
-/** "Today, 14:30" · "Yesterday, 09:10" · "8 Oct, 14:30" */
+/** "Today, 14:30" · "Yesterday, 09:10" · "8 Oct, 14:30" (localised) */
 export function dateTime(iso) {
   if (!iso) return '';
   const d = new Date(iso);
   if (isNaN(d)) return '';
-  const days = Math.round((new Date(iso).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 864e5);
-  const day = days === 0 ? 'Today' : days === -1 ? 'Yesterday' : shortDate(iso);
-  return `${day}, ${timeFmt.format(d)}`;
+  const days = dayDiff(iso);
+  const day = days === 0 ? t('time.today') : days === -1 ? t('time.yesterday') : shortDate(iso);
+  return t('time.dayAtTime', { day, time: timeOfDay(iso) });
+}
+
+/** Weekday + date + time, e.g. "Thu 15 Oct, 10:00" (activities). */
+export function eventDateTime(iso) {
+  if (!iso) return '';
+  return fmt('event', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
 }
