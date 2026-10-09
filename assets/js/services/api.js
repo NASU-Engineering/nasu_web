@@ -14,7 +14,7 @@ import { ApiError, toApiError } from './errors.js';
 import { safeUrl } from './normalize.js';
 import {
   normalizeAccess, normalizeContentItem, normalizeAuditEntry, normalizeMember,
-  normalizeStats, normalizeGroups, normalizePage,
+  normalizeStats, normalizeGroups, normalizePage, normalizeApplication,
 } from './normalize-workspace.js';
 import * as mockBackend from './mock-backend.js';
 import * as supabaseBackend from './supabase-backend.js';
@@ -43,7 +43,10 @@ function wrap(context, fn) {
 /* ---------- auth events ---------- */
 
 // Listeners receive 'signed_in' | 'signed_out'.
-let accessCache = null; // { key, promise } — see getAccess()
+let accessCache = null; // { key, promise, at } — see getAccess()
+// Roles can change while someone is signed in (an admin grants or revokes one).
+// Access is re-read from the backend at most this often; the backend still checks every call.
+export const ACCESS_TTL_MS = 2 * 60 * 1000;
 
 const authListeners = new Set();
 function emitAuthChange(type) {
@@ -70,9 +73,10 @@ async function loadAccess() {
 function getAccess(session, { refresh = false } = {}) {
   const key = session?.email || '';
   if (!key) return Promise.resolve(NO_ACCESS);
-  if (refresh || !accessCache || accessCache.key !== key) {
+  const stale = accessCache && Date.now() - accessCache.at > ACCESS_TTL_MS;
+  if (refresh || stale || !accessCache || accessCache.key !== key) {
     const promise = loadAccess();
-    accessCache = { key, promise };
+    accessCache = { key, promise, at: Date.now() };
     promise.catch(() => { if (accessCache?.promise === promise) accessCache = null; }); // retry next time
   }
   return accessCache.promise;
@@ -238,14 +242,35 @@ export const api = {
     }),
   },
 
+  /* ----- admin operations: presence, activity, applications, data integrity ----- */
+  // Each answers 'backend_required' until its RPC exists; the UI then says "Not collected".
+
+  ops: {
+    activitySummary: wrap('ops', () => be().getActivitySummary()),
+    recentActivity: wrap('ops', ({ limit = 8 } = {}) => be().listRecentActivity({ limit })),
+    applicationSummary: wrap('ops', () => be().getApplicationSummary()),
+    listApplications: wrap('ops', async ({ status = '', query = '', cursor = null } = {}) =>
+      normalizePage(await be().listApplications({ status, query: query.trim(), cursor }), normalizeApplication)),
+    /** decision: 'approve' | 'reject' | 'needs_review'. Approval is always an explicit admin action. */
+    reviewApplication: wrap('ops', async (id, { decision, note = '' }) => normalizeApplication(await be().reviewApplication(id, { decision, note }))),
+    integritySummary: wrap('ops', () => be().getDataIntegritySummary()),
+  },
+
+  presence: {
+    /** Heartbeat from a visible, signed-in tab. Never sent while simulating. */
+    heartbeat: wrap('presence', () => (isSimulating() ? null : be().recordPresence())),
+  },
+
   /* ----- engagement: quizzes, activities, XP, leaderboards (mock only until the backend exists) ----- */
 
   engage: {
     progress: wrap('engage', () => be().getProgress()),
     quizzes: wrap('engage', ({ subjectId = '' } = {}) => be().listQuizzes({ subjectId: subjectId || undefined })),
     quiz: wrap('engage', id => be().getQuiz(id)),
-    /** answers: { questionId: optionId }. The server scores it and decides any XP. */
-    submitQuiz: wrap('engage', (id, answers) => be().submitQuiz(id, answers)),
+    /** Starts an attempt on the server (the attempt counts and its timer starts there). */
+    startQuiz: wrap('engage', id => be().startQuiz(id)),
+    /** answers: { questionId: optionId }. The server scores the attempt and decides any XP. */
+    submitQuiz: wrap('engage', (attemptId, answers) => be().submitQuiz(attemptId, answers)),
     activities: wrap('engage', () => be().listActivities()),
     joinActivity: wrap('engage', id => be().joinActivity(id)),
     leaveActivity: wrap('engage', id => be().leaveActivity(id)),
@@ -278,7 +303,7 @@ export const api = {
     }),
     exit: () => exitSimulation(),
     /** Resets the simulator's own sample data (mock workspace only). */
-    reset: () => { mockBackend.resetMockWorkspace(); mockBackend.resetMockEngagement(); },
+    reset: () => { mockBackend.resetMockWorkspace(); mockBackend.resetMockEngagement(); mockBackend.resetMockOps(); },
   },
 };
 

@@ -10,7 +10,7 @@ import { experienceForPath, experienceById, navFor, subnavFor, activeHref } from
 import { isSimulating } from '../services/simulator.js';
 import { t } from '../i18n/index.js';
 
-export function consoleShell({ path, eyebrow, title, lead, actions = '', body }) {
+export function consoleShell({ path, eyebrow, title, lead, actions = '', back = null, body }) {
   const exp = experienceById(experienceForPath(path));
   const items = navFor(exp.id);
   const active = activeHref(items, path);
@@ -33,6 +33,7 @@ export function consoleShell({ path, eyebrow, title, lead, actions = '', body })
       <div class="console-main">
         <div class="console-head">
           <div>
+            ${back ? html`<a class="back-link" href="#${back.href}">${icons.back}<span>${back.label}</span></a>` : ''}
             ${eyebrow ? html`<p class="eyebrow mono">${eyebrow}</p>` : ''}
             <h1 class="page-title" tabindex="-1">${title}</h1>
             ${lead ? html`<p class="lead">${lead}</p>` : ''}

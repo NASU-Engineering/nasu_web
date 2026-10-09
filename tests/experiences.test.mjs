@@ -96,26 +96,31 @@ test('student navigation: five grouped destinations, never a staff destination',
 test('each staff workspace shows only its own navigation (never mixed)', () => {
   assert.deepEqual(keys(navFor('editor')), ['studioOverview', 'upload', 'myContent']);
   assert.deepEqual(keys(navFor('review')), ['reviewQueue', 'reviewHistory']);
-  assert.deepEqual(keys(navFor('admin')), ['adminOverview', 'people', 'content', 'insights', 'settings'], 'five admin destinations');
+  assert.deepEqual(keys(navFor('admin')), ['adminOverview', 'studentsTeam', 'content', 'settings'], 'four admin destinations');
   for (const [id, items] of Object.entries(WORKSPACE_NAV)) {
     const prefix = EXPERIENCES.find(e => e.id === id).home;
     for (const item of items) assert.ok(item.href === prefix || item.href.startsWith(prefix + '/'), `${id} nav leaks ${item.href}`);
   }
 });
 
-test('admin sections live inside their destination, not as extra top-level tabs', () => {
-  const top = new Set(navFor('admin').map(n => n.href));
-  for (const [dest, items] of Object.entries(SUBNAV)) {
-    assert.ok(top.has(dest), `${dest} is a top-level destination`);
-    for (const i of items) assert.ok(i.href === dest || i.href.startsWith(dest + '/'), i.href);
-  }
-  assert.deepEqual(keys(subnavFor('/admin/content/quizzes')), ['library', 'reviewQueue', 'quizzes', 'activities']);
-  assert.deepEqual(subnavFor('/admin'), []);
+test('admin: four destinations, no nested tabs; contextual pages highlight their parent', () => {
+  assert.equal(navFor('admin').length, 4, 'at most four primary destinations');
+  assert.deepEqual(SUBNAV, {}, 'no in-page tab level anywhere');
+  for (const p of ['/admin', '/admin/people', '/admin/content/7', '/admin/settings']) assert.deepEqual(subnavFor(p), []);
+  assert.equal(activeHref(navFor('admin'), '/admin/analytics'), '/admin', 'detailed analytics belongs to Overview');
+  assert.equal(activeHref(navFor('admin'), '/admin/audit'), '/admin/settings', 'audit log opens from Settings');
+  assert.equal(activeHref(navFor('admin'), '/admin/simulator'), '/admin/settings', 'simulator opens from Settings');
 });
 
-test('the simulator entry is hidden inside a running simulation', () => {
-  assert.ok(subnavFor('/admin/settings').some(n => n.href === '/admin/settings/simulator'));
-  assert.ok(!subnavFor('/admin/settings', { simulating: true }).some(n => n.href === '/admin/settings/simulator'));
+test('old admin addresses land on the simplified pages (no dead links)', () => {
+  assert.equal(REDIRECTS['/admin/people/staff'], '/admin/people?view=staff');
+  assert.equal(REDIRECTS['/admin/content/review'], '/admin/content?status=pending_review');
+  assert.equal(REDIRECTS['/admin/content/quizzes'], '/admin/content?type=quiz');
+  assert.equal(REDIRECTS['/admin/insights'], '/admin/analytics');
+  assert.equal(REDIRECTS['/admin/insights/audit'], '/admin/audit');
+  assert.equal(REDIRECTS['/admin/settings/simulator'], '/admin/simulator');
+  const routes = [...app.matchAll(/path: '([^']+)', view/g)].map(m => m[1]);
+  for (const to of Object.values(REDIRECTS)) assert.ok(routes.includes(to.split('?')[0]), `${to} is a real route`);
 });
 
 test('routes map to exactly one experience', () => {
@@ -150,6 +155,6 @@ test('mobile navigation: the student bottom bar is the student nav; active item 
   assert.equal(activeHref(navFor('editor'), '/editor/upload'), '/editor/upload');
   assert.equal(activeHref(navFor('review'), '/review/c9'), '/review');
   assert.equal(activeHref(navFor('admin'), '/admin/content/7'), '/admin/content');
-  assert.equal(activeHref(navFor('admin'), '/admin/insights/audit'), '/admin/insights');
+  assert.equal(activeHref(navFor('admin'), '/admin/people'), '/admin/people');
   assert.equal(activeHref(navFor('admin'), '/dashboard'), null);
 });

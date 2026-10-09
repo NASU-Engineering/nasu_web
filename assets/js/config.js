@@ -5,6 +5,13 @@
 // privileged/secret API key, database password or any student data.
 
 export const CONFIG = {
+  // 'production' | 'staging' | 'preview'. Shown to admins; staging and preview
+  // get a banner. 'preview' must use backend: 'mock' (synthetic data only).
+  environment: 'production',
+
+  // Shown in Admin → Settings → General.
+  academicYear: '2026/2027',
+
   // 'supabase' → real backend (services/supabase-backend.js)
   // 'mock'     → DEV ONLY: local fake data, no real accounts (services/mock-backend.js)
   backend: 'supabase',
@@ -47,6 +54,13 @@ export const CONFIG = {
   // services/simulator.js); set to false to hide it.
   features: {
     roleSimulator: true,
+    // Quizzes, Activities, XP and Leaderboards. Off until the engagement
+    // migration (supabase/prepared/20261010_03_engagement.sql) is approved and
+    // applied; while off the Hub says "not live yet" and calls nothing.
+    engagement: false,
+    // Online-presence heartbeat (record_presence, migration 20261010_02). Off
+    // until that migration is applied; the admin then sees "Not collected".
+    presence: false,
   },
 
   // Legacy resource list from the original site, still read by the mock content.

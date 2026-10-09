@@ -3,3 +3,6 @@
 tools/reconcile/data/
 tools/reconcile/out/
 *.private.csv
+
+# Test tooling (npm is used for tests only; the site has no build step)
+node_modules/

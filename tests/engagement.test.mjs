@@ -107,14 +107,19 @@ test('mock: a student takes a quiz; XP, attempts and the leaderboard update cons
   const full = await api.engage.quiz('q-math1-w1');
   assert.ok(full.questions.every(q => !('answer' in q)), 'mock never sends answers before submission');
 
-  const r1 = await api.engage.submitQuiz('q-math1-w1', { q1: 'c', q2: 'b' }); // 50%
+  const a1 = await api.engage.startQuiz('q-math1-w1');
+  assert.ok(a1.attemptId && a1.startedAt, 'the attempt and its clock start on the server');
+  assert.ok(a1.questions.every(q => !('answer' in q)));
+  const r1 = await api.engage.submitQuiz(a1.attemptId, { q1: 'c', q2: 'b' }); // 50%
   assert.equal(r1.percent, 50);
   assert.equal(r1.xpAwarded, 20);
   assert.equal(r1.attemptsLeft, 1);
-  const r2 = await api.engage.submitQuiz('q-math1-w1', { q1: 'c' }); // 25%: worse
+  await assert.rejects(api.engage.submitQuiz(a1.attemptId, { q1: 'c', q2: 'b', q3: 'a', q4: 'c' }), { code: 'conflict' }, 'a submitted attempt can’t be replayed');
+  const a2 = await api.engage.startQuiz('q-math1-w1');
+  const r2 = await api.engage.submitQuiz(a2.attemptId, { q1: 'c' }); // 25%: worse
   assert.equal(r2.xpAwarded, 0, 'no XP for a worse retake');
-  await assert.rejects(api.engage.submitQuiz('q-math1-w1', {}), { code: 'conflict' }, 'attempt limit enforced');
-  await assert.rejects(api.engage.submitQuiz('q-chem-w1', {}), { code: 'conflict' }, 'closed quiz refused');
+  await assert.rejects(api.engage.startQuiz('q-math1-w1'), { code: 'conflict' }, 'attempt limit enforced at start');
+  await assert.rejects(api.engage.startQuiz('q-chem-w1'), { code: 'conflict' }, 'closed quiz refused');
 
   const after = await api.engage.progress();
   assert.equal(after.xp, 64);
@@ -137,12 +142,26 @@ test('mock: activities join/leave; full and past activities refuse new joins', a
   await api.sim.exit();
 });
 
-test('production engagement adapter is honest: every call answers backend_required', async () => {
+test('production engagement adapter: off by default, never invents data, never sends scores or XP', async () => {
+  const { CONFIG } = await import('../assets/js/config.js');
+  assert.equal(CONFIG.features.engagement, false, 'production ships with engagement off until the migration is approved');
   const live = await import('../assets/js/services/supabase-engage.js');
-  for (const [name, fn] of Object.entries(live)) {
-    if (typeof fn !== 'function') continue;
-    await assert.rejects(fn(), { code: 'backend_required' }, name);
-  }
+  const calls = ['getProgress', 'listQuizzes', 'getQuiz', 'startQuiz', 'submitQuiz', 'listActivities', 'joinActivity',
+    'leaveActivity', 'getLeaderboard', 'adminListQuizzes', 'adminListActivities', 'adminEngagementStats'];
+  for (const name of calls) await assert.rejects(live[name]('x'), { code: 'backend_required' }, name);
   const src = readFileSync(new URL('../assets/js/services/supabase-engage.js', import.meta.url), 'utf8');
-  assert.doesNotMatch(src, /\.rpc\(|\.from\(/, 'no engagement tables or RPCs are called before they exist');
+  assert.doesNotMatch(src, /\.from\(/, 'no direct table access');
+  assert.doesNotMatch(src, /import .*mock/, 'never falls back to mock data');
+  // The browser sends answers only — never a score, percent or XP amount.
+  assert.match(src, /p_attempt_id: attemptId, p_answers: answers/);
+  assert.doesNotMatch(src, /p_(score|percent|xp|amount|correct)\b/);
+});
+
+test('engagement row mapping', async () => {
+  const { mapQuiz, mapResult } = await import('../assets/js/services/supabase-engage.js');
+  const q = mapQuiz({ id: 'q', subject_id: 'BSC111', week: 1, title: 'T', time_limit_min: 10, max_attempts: 2, question_count: 4, status: 'open', attempts_used: 1, best_percent: 50, can_attempt: 'ok' });
+  assert.equal(q.subjectId, 'math1', 'course codes map back to subject ids');
+  assert.equal(q.attemptsUsed, 1);
+  const r = mapResult({ correct: 3, total: 4, percent: 75, xp_awarded: 14, attempts_left: 0, review: [{ question_id: 'a', chosen: 'x', correct_option_id: 'x', is_correct: true }] });
+  assert.deepEqual([r.percent, r.xpAwarded, r.attemptsLeft, r.review[0].isCorrect], [75, 14, 0, true]);
 });

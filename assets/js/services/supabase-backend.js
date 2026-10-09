@@ -160,3 +160,7 @@ export * from './supabase-workspace.js';
 /* ---------- engagement (not live yet) ---------- */
 
 export * from './supabase-engage.js';
+
+/* ---------- admin operations (prepared RPCs, not applied yet) ---------- */
+
+export * from './supabase-ops.js';

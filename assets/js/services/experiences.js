@@ -76,38 +76,19 @@ export const WORKSPACE_NAV = {
     item('reviewQueue',   '/review',         'inbox'),
     item('reviewHistory', '/review/history', 'history'),
   ],
+  // Four destinations. Detailed analytics, the audit log and the role simulator
+  // are contextual pages opened from Overview / Settings, not extra tabs.
   admin: [
-    item('adminOverview', '/admin',          'grid'),
-    item('people',        '/admin/people',   'users'),
+    item('adminOverview', '/admin',          'grid',     { match: ['/admin', '/admin/analytics'] }),
+    item('studentsTeam',  '/admin/people',   'users'),
     item('content',       '/admin/content',  'list'),
-    item('insights',      '/admin/insights', 'chart'),
-    item('settings',      '/admin/settings', 'settings'),
+    item('settings',      '/admin/settings', 'settings', { match: ['/admin/settings', '/admin/audit', '/admin/simulator'] }),
   ],
 };
 
-// In-page sections of a destination (tabs inside the page, not top-level navigation).
-export const SUBNAV = {
-  '/admin/people': [
-    item('students', '/admin/people',       'users'),
-    item('staff',    '/admin/people/staff', 'shield'),
-  ],
-  '/admin/content': [
-    item('library',     '/admin/content',            'list'),
-    item('reviewQueue', '/admin/content/review',     'inbox'),
-    item('quizzes',     '/admin/content/quizzes',    'quiz'),
-    item('activities',  '/admin/content/activities', 'flag'),
-  ],
-  '/admin/insights': [
-    item('analytics',      '/admin/insights',            'chart'),
-    item('engagement',     '/admin/insights/engagement', 'trophy'),
-    item('reviewActivity', '/admin/insights/reviews',    'history'),
-    item('auditLog',       '/admin/insights/audit',      'clock'),
-  ],
-  '/admin/settings': [
-    item('platform',  '/admin/settings',           'settings'),
-    item('simulator', '/admin/settings/simulator', 'eye', { hideInSimulation: true }),
-  ],
-};
+// In-page section tabs. None today: every workspace's pages are reachable from
+// its own navigation in at most two steps (filters and dialogs, not more tabs).
+export const SUBNAV = {};
 
 /** Navigation for one experience only. */
 export function navFor(experienceId) {
@@ -134,13 +115,20 @@ export const REDIRECTS = {
   '/editor/drafts': '/editor/uploads?status=draft',
   '/review/processed': '/review/history',
   '/admin/students': '/admin/people',
-  '/admin/team': '/admin/people/staff',
-  '/admin/reviews': '/admin/insights/reviews',
-  '/admin/review': '/admin/content/review',
-  '/admin/audit': '/admin/insights/audit',
-  '/admin/analytics': '/admin/insights',
-  '/admin/simulator': '/admin/settings/simulator',
-  '/admin/activities': '/admin/content/activities',
-  '/admin/quizzes': '/admin/content/quizzes',
-  '/admin/leaderboards': '/admin/insights/engagement',
+  '/admin/team': '/admin/people?view=staff',
+  '/admin/people/staff': '/admin/people?view=staff',
+  '/admin/applications': '/admin/people?view=applications',
+  '/admin/review': '/admin/content?status=pending_review',
+  '/admin/content/review': '/admin/content?status=pending_review',
+  '/admin/content/quizzes': '/admin/content?type=quiz',
+  '/admin/content/activities': '/admin/content?type=activity',
+  '/admin/quizzes': '/admin/content?type=quiz',
+  '/admin/activities': '/admin/content?type=activity',
+  '/admin/insights': '/admin/analytics',
+  '/admin/insights/engagement': '/admin/analytics',
+  '/admin/insights/reviews': '/admin/analytics',
+  '/admin/reviews': '/admin/analytics',
+  '/admin/leaderboards': '/admin/analytics',
+  '/admin/insights/audit': '/admin/audit',
+  '/admin/settings/simulator': '/admin/simulator',
 };

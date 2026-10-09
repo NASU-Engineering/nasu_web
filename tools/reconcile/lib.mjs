@@ -5,7 +5,7 @@
 // Privacy: nothing here returns a phone number. Student codes appear in the
 // shareable report only as salted HMAC references (S-xxxxxxxx).
 
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 
 /* ---------- CSV (RFC 4180: quotes, escaped quotes, commas/newlines in fields, BOM) ---------- */
 
@@ -290,4 +290,111 @@ export function privateDetailsCsv(result, salt) {
   L.linkCodeMismatch.forEach(x => add('link_code_mismatch', x.code, x.approvedId, `application code ${x.applicationCode}`));
   const esc = v => (/[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
   return rows.map(r => r.map(esc).join(',')).join('\n') + '\n';
+}
+
+/* ---------- sources, conflicts and intake export (added 2026-10-10) ---------- */
+
+
+const normName = v => latinDigits(v).trim().replace(/\s+/g, ' ').toLowerCase();
+const normTime = v => {
+  const s = String(v ?? '').trim();
+  const d = new Date(s);
+  return isNaN(d) ? s : d.toISOString();
+};
+
+/**
+ * Stable id for a form response that has no Google response id (CSV/Sheet exports):
+ * hash of timestamp + raw code + name. Re-exports produce the same id, so loading
+ * twice is a no-op (intake is idempotent by this id).
+ */
+export function responseKey(row, cols) {
+  const basis = [normTime(row[cols.responseTime]), String(row[cols.responseCode] ?? '').trim(), normName(row[cols.responseName])].join('|');
+  return 'csv:' + createHash('sha256').update(basis).digest('hex').slice(0, 24);
+}
+
+/** CSV export vs Google Sheet: rows present in one and not the other (by responseKey). */
+export function compareSources(csvRows, sheetRows, cols) {
+  const keys = rows => new Map(rows.map(r => [responseKey(r, cols), r]));
+  const a = keys(csvRows);
+  const b = keys(sheetRows);
+  const onlyCsv = [...a].filter(([k]) => !b.has(k)).map(([, r]) => r);
+  const onlySheet = [...b].filter(([k]) => !a.has(k)).map(([, r]) => r);
+  return {
+    counts: { csvRows: csvRows.length, sheetRows: sheetRows.length, missingFromSheet: onlyCsv.length, missingFromCsv: onlySheet.length },
+    lists: {
+      missingFromSheet: onlyCsv.map(r => ({ code: normalizeCode(r[cols.responseCode]), row: r.__row, time: normTime(r[cols.responseTime]) })),
+      missingFromCsv: onlySheet.map(r => ({ code: normalizeCode(r[cols.responseCode]), row: r.__row, time: normTime(r[cols.responseTime]) })),
+    },
+  };
+}
+
+/**
+ * Data-quality checks on the responses:
+ *   invalid   — non-blank codes that don't match the expected format
+ *   conflicts — one code submitted with different names or phone numbers
+ *               (and, when applications are given, a name that differs from the application)
+ */
+export function responseIssues(responses, cols, { codePattern = /^[A-Z0-9-]{4,20}$/, applications = [], appCols = {} } = {}) {
+  const invalid = responses.filter(r => { const c = normalizeCode(r[cols.responseCode]); return c && !codePattern.test(c); })
+    .map(r => ({ code: normalizeCode(r[cols.responseCode]), row: r.__row }));
+  const byCode = groupBy(responses, r => normalizeCode(r[cols.responseCode]));
+  const appByCode = groupBy(applications, r => normalizeCode(r[appCols.appCode]));
+  const conflicts = [];
+  for (const [code, rows] of byCode) {
+    const names = new Set(rows.map(r => normName(r[cols.responseName])).filter(Boolean));
+    const phones = new Set(rows.map(r => normalizePhone(r[cols.responsePhone]).e164 || latinDigits(r[cols.responsePhone]).replace(/\D/g, '')).filter(Boolean));
+    const appNames = new Set((appByCode.get(code) || []).map(a => normName(a[appCols.appName])).filter(Boolean));
+    const kinds = [];
+    if (names.size > 1) kinds.push('name differs between responses');
+    if (phones.size > 1) kinds.push('phone differs between responses');
+    if (appNames.size && names.size && ![...names].some(n => appNames.has(n))) kinds.push('name differs from application');
+    if (kinds.length) conflicts.push({ code, rows: rows.map(r => r.__row), kinds });
+  }
+  return { counts: { invalidCodes: invalid.length, conflictingCodes: conflicts.length }, lists: { invalid, conflicts } };
+}
+
+const sqlText = v => (v == null || v === '' ? 'null' : `'${String(v).replace(/'/g, "''")}'`);
+
+/**
+ * PRIVATE output: SQL that loads chosen responses into the review workflow through
+ * public.ingest_form_response (idempotent — re-running is a no-op). It never
+ * approves anyone; unmatched codes become 'needs_review'. Keep in out/private/.
+ */
+export function intakeSql(responses, cols, { formId = 'google-form', only = null } = {}) {
+  const header = Object.keys(responses[0] || {}).filter(h => h !== '__row');
+  const lines = [
+    '-- PRIVATE — contains student answers. Run only after approval, as the database owner, on staging first.',
+    '-- Idempotent: each response has a stable id; running twice changes nothing.',
+    'begin;',
+  ];
+  for (const r of responses) {
+    const code = normalizeCode(r[cols.responseCode]);
+    if (only && !only.has(code)) continue;
+    const payload = Object.fromEntries(header.map(h => [h, r[h]]));
+    payload.student_code = r[cols.responseCode] ?? '';
+    if (cols.responseName) payload.full_name = r[cols.responseName] ?? '';
+    const ts = normTime(r[cols.responseTime]);
+    lines.push(`select public.ingest_form_response(${sqlText(responseKey(r, cols))}, ${sqlText(formId)}, ${/^\d{4}-/.test(ts) ? sqlText(ts) + '::timestamptz' : 'null'}, ${sqlText(JSON.stringify(payload))}::jsonb, 'csv_reconcile', ${Number(r.__row) || 'null'});`);
+  }
+  lines.push('-- review the output above, then:', 'commit;');
+  return lines.join('\n') + '\n';
+}
+
+/** Extra shareable sections (sources, invalid codes, conflicts) — references only. */
+export function shareableExtras({ sources, issues }, salt) {
+  const ref = c => (c ? codeRef(c, salt) : '(blank)');
+  const out = [];
+  if (sources) {
+    out.push('## Form export vs Google Sheet', '', '| Check | Count |', '|---|---|',
+      `| Rows in the form export | ${sources.counts.csvRows} |`, `| Rows in the Google Sheet | ${sources.counts.sheetRows} |`,
+      `| In the export but missing from the Sheet | ${sources.counts.missingFromSheet} |`,
+      `| In the Sheet but missing from the export | ${sources.counts.missingFromCsv} |`, '',
+      ...(sources.lists.missingFromSheet.length ? sources.lists.missingFromSheet.map(x => `- export row ${x.row} (${x.time.slice(0, 10)}) — ${ref(x.code)}`) : ['_none_']), '');
+  }
+  if (issues) {
+    out.push('## Data quality', '', '| Check | Count |', '|---|---|',
+      `| Codes with an invalid format | ${issues.counts.invalidCodes} |`, `| Codes with conflicting details | ${issues.counts.conflictingCodes} |`, '',
+      ...(issues.lists.conflicts.length ? issues.lists.conflicts.map(x => `- ${ref(x.code)} — rows ${x.rows.join(', ')}: ${x.kinds.join('; ')}`) : ['_no conflicts_']), '');
+  }
+  return out.join('\n');
 }

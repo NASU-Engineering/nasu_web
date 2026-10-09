@@ -1,14 +1,16 @@
-// Admin · Insights · Analytics: platform metrics and activity monitoring.
-// Every figure says where it comes from; nothing is estimated and nothing is
-// "real-time" (there is no presence data source). See services/activity.js.
+// Admin · Detailed analytics (contextual page from Overview): usage and presence,
+// audit-log activity, engagement and the latest review decisions.
+// Every figure says where it comes from; nothing is estimated. Presence and
+// daily-active numbers need the activity migration — until then "Not collected".
 
-import { html } from '../../ui/html.js';
+import { html, mount } from '../../ui/html.js';
 import { api } from '../../services/api.js';
 import { consoleShell, statTile, panel, fill } from '../../ui/console.js';
 import { emptyState } from '../../ui/components.js';
 import { dateTime } from '../../ui/format.js';
 import { trackingCoverage, observedActions, dailyCounts } from '../../services/activity.js';
-import { t } from '../../i18n/index.js';
+import { reviewEvents, timeline } from './review-history.js';
+import { t, formatNumber } from '../../i18n/index.js';
 
 const SAMPLE_PAGES = 3; // audit log pages read for the activity sample (≤ 150 entries)
 
@@ -77,31 +79,39 @@ function actionsTable(entries) {
     </div>`;
 }
 
+const settle = p => p.then(value => ({ value }), error => ({ error }));
+const naText = err => (err?.code === 'backend_required' ? t('admin.notCollected') : t('admin.unavailable'));
+
+/** Detailed analytics — opened from Overview ("View detailed analytics"), not a tab. */
 export default async function adminAnalytics({ access, path }) {
   return {
-    title: t('nav.analytics'),
+    title: t('analytics.title'),
     html: consoleShell({
       access, path,
+      back: { href: '/admin', label: t('nav.adminOverview') },
       eyebrow: t('experience.admin'),
-      title: t('nav.insights'),
+      title: t('analytics.title'),
       lead: t('analytics.lead'),
       body: html`
         ${legend()}
-        <div id="anStats" class="stat-grid stat-grid-wide"></div>
+        ${panel(t('analytics.usage'), html`<div id="anUsage" class="stat-grid"></div>`)}
         <div id="anAudit"></div>
-        ${panel(t('analytics.presence'), html`
-          <div class="av-row">${avBadge('av-none', 'status.source.not_live')}<p class="muted">${t('analytics.presenceText')}</p></div>`)}`,
+        <div class="console-cols">
+          ${panel(t('nav.engagement'), html`<div id="anEngage"></div>`)}
+          ${panel(t('insights.latestDecisions'), html`<div id="anReviews"></div>`)}
+        </div>`,
     }),
-    bind(root) {
-      fill(root.querySelector('#anStats'), {
-        load: () => api.admin.getStats(),
-        render: s => html`
-          ${statTile({ label: t('admin.stat.students'), value: s.total_students, icon: 'users', hint: t('status.source.live') })}
-          ${statTile({ label: t('admin.stat.editors'), value: s.section_editors, icon: 'upload', hint: t('status.source.live') })}
-          ${statTile({ label: t('admin.stat.managers'), value: s.content_managers, icon: 'shield', hint: t('status.source.live') })}
-          ${statTile({ label: t('admin.stat.pending'), value: s.pending_reviews, icon: 'inbox', hint: t('status.source.live') })}
-          ${statTile({ label: t('admin.stat.published'), value: s.published_resources, icon: 'book', hint: t('status.source.live') })}`,
-      });
+    async bind(root) {
+      // Usage: presence + daily activity (Not collected until the activity migration is applied).
+      const usage = await settle(api.ops.activitySummary());
+      const u = root.querySelector('#anUsage');
+      if (u?.isConnected) {
+        const tile = (label, key, icon) => statTile({ label, icon, value: usage.value ? usage.value[key] : null, hint: usage.value ? t('status.source.live') : naText(usage.error) });
+        mount(u, html`
+          ${tile(t('admin.kpi.online'), 'online_now', 'eye')}
+          ${tile(t('admin.kpi.activeToday'), 'active_24h', 'chart')}
+          ${tile(t('analytics.signIns24h'), 'sign_ins_24h', 'user')}`);
+      }
       fill(root.querySelector('#anAudit'), {
         load: loadAuditSample,
         render: ({ entries, complete }) => {
@@ -113,6 +123,22 @@ export default async function adminAnalytics({ access, path }) {
               ${panel(t('analytics.recordedActions'), html`<p class="help-dark">${t('analytics.recordedActionsText')}</p>${actionsTable(entries)}`)}
             </div>`;
         },
+      });
+      fill(root.querySelector('#anEngage'), {
+        load: () => api.engage.adminStats(),
+        render: s => html`
+          <dl class="facts">
+            <div><dt>${t('engage.studentsWithXp')}</dt><dd class="mono">${formatNumber(s.students_with_xp)}</dd></div>
+            <div><dt>${t('engage.xpTotal')}</dt><dd class="mono">${formatNumber(s.xp_total)}</dd></div>
+            <div><dt>${t('engage.quizAttempts')}</dt><dd class="mono">${formatNumber(s.quiz_attempts)}</dd></div>
+            <div><dt>${t('engage.participants')}</dt><dd class="mono">${formatNumber(s.activity_participants)}</dd></div>
+          </dl>
+          ${s.top?.length ? html`<ol class="board">${s.top.map(p => html`
+            <li><span class="board-rank mono">${p.rank}</span><span class="board-name">${p.name}</span><span class="board-level mono">${t('progress.levelShort', { level: p.level })}</span><span class="board-xp mono">${formatNumber(p.xp)} XP</span></li>`)}</ol>` : ''}`,
+      });
+      fill(root.querySelector('#anReviews'), {
+        load: () => api.review.listQueue({ status: 'processed' }),
+        render: page => timeline(reviewEvents(page.items).slice(0, 12), it => `#/admin/content/${encodeURIComponent(it.id)}`, 3),
       });
     },
   };

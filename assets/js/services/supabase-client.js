@@ -31,3 +31,10 @@ export function getSupabase() {
   }
   return clientPromise;
 }
+
+/**
+ * Test seam: integration tests (supabase/tests/contract.test.mjs) replace the client
+ * with one backed by an isolated database. Grants nothing — the database still
+ * authorises every call.
+ */
+export function setSupabaseClientForTests(client) { clientPromise = Promise.resolve(client); }

@@ -94,7 +94,7 @@ function seed(user) {
   ledger = applyXpEvent(ledger, { userId: user.id, type: 'activity_completed', sourceId: 'act-safety', amount: 20, at: at(-4) }).ledger;
   return {
     user: user.id,
-    attempts: { 'q-chem-w1': [{ at: at(-2), correct: 3, total: 4, percent: 75, xpAwarded: 24, review: null }] },
+    attempts: { 'q-chem-w1': [{ id: 'att-seed', startedAt: at(-2), at: at(-2), submitted: true, correct: 3, total: 4, percent: 75, xpAwarded: 24, review: null }] },
     ledger,
     joined: { 'act-safety': true, 'act-orientation': true },
     confirmed: { 'act-safety': true }, // attendance confirmed by the organiser
@@ -115,7 +115,8 @@ const titleOf = e => (QUIZZES.find(q => q.id === e.sourceId) || ACTIVITIES.find(
 
 function quizSummary(q, s) {
   const attempts = s.attempts[q.id] || [];
-  const best = attempts.length ? Math.max(...attempts.map(a => a.percent)) : null;
+  const done = attempts.filter(a => a.submitted);
+  const best = done.length ? Math.max(...done.map(a => a.percent)) : null;
   return {
     id: q.id, subjectId: q.subjectId, week: q.week, title: q.title, timeLimitMin: q.timeLimitMin, maxAttempts: q.maxAttempts,
     opensAt: q.opensAt, closesAt: q.closesAt, questionCount: q.questions.length,
@@ -141,7 +142,7 @@ export async function getProgress() {
   return {
     xp, ...levelFor(xp),
     ranks: { section: rank('section'), group: rank('group'), university: rank('university') },
-    quizzesCompleted: Object.keys(s.attempts).length,
+    quizzesCompleted: Object.values(s.attempts).filter(list => list.some(a => a.submitted)).length,
     activitiesCompleted: Object.keys(s.confirmed).length,
     recent: [...s.ledger].filter(e => e.userId === user.id).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 8)
       .map(e => ({ type: e.type, sourceId: e.sourceId, title: titleOf(e), amount: e.amount, at: e.at })),
@@ -158,30 +159,55 @@ export async function getQuiz(id) {
   await delay();
   const { s } = state();
   const q = quizById(id);
-  const attempts = s.attempts[id] || [];
-  return { ...quizSummary(q, s), questions: publicQuiz(q).questions, attempts: attempts.map(({ review, ...a }) => a), lastResult: attempts.at(-1) || null };
+  const done = (s.attempts[id] || []).filter(a => a.submitted);
+  return { ...quizSummary(q, s), questions: publicQuiz(q).questions, attempts: done.map(({ review, ...a }) => a), lastResult: done.at(-1) || null };
 }
 
-export async function submitQuiz(id, answers) {
-  await delay(400);
-  const { s, user } = state();
+/**
+ * Starts an attempt. Like the server, the attempt counts as soon as it starts
+ * (no peeking and abandoning) and the start time fixes the deadline.
+ */
+export async function startQuiz(id) {
+  await delay(250);
+  const { s } = state();
   const q = quizById(id);
   const attempts = s.attempts[id] || [];
   const gate = canAttempt(q, attempts.length);
   if (!gate.ok) throw new ApiError('conflict', `mock: ${gate.reason}`);
+  const startedAt = new Date().toISOString();
+  const attempt = { id: `att-${Date.now().toString(36)}-${attempts.length + 1}`, startedAt, submitted: false };
+  s.attempts[id] = [...attempts, attempt];
+  save(s);
+  return { attemptId: attempt.id, startedAt, timeLimitMin: q.timeLimitMin, questions: publicQuiz(q).questions };
+}
+
+const GRACE_MS = 30e3;
+
+/** Submits a started attempt. Scored here (server side in production); a second submit is refused. */
+export async function submitQuiz(attemptId, answers) {
+  await delay(400);
+  const { s, user } = state();
+  const quizId = Object.keys(s.attempts).find(k => s.attempts[k].some(a => a.id === attemptId));
+  if (!quizId) throw new ApiError('not_found');
+  const q = quizById(quizId);
+  const attempts = s.attempts[quizId];
+  const attempt = attempts.find(a => a.id === attemptId);
+  if (attempt.submitted) throw new ApiError('conflict', 'mock: already submitted');
+  if (Date.now() > Date.parse(attempt.startedAt) + q.timeLimitMin * 6e4 + GRACE_MS) throw new ApiError('conflict', 'mock: time limit passed');
   const result = scoreAttempt(q, answers);
-  const previousBest = attempts.length ? Math.max(...attempts.map(a => a.percent)) : null;
+  const done = attempts.filter(a => a.submitted);
+  const previousBest = done.length ? Math.max(...done.map(a => a.percent)) : null;
   const now = new Date().toISOString();
   let xpAwarded = 0;
-  for (const e of quizXpEvents({ userId: user.id, quizId: id, previousBestPercent: previousBest, percent: result.percent, at: now })) {
+  for (const e of quizXpEvents({ userId: user.id, quizId, previousBestPercent: previousBest, percent: result.percent, at: now })) {
     const r = applyXpEvent(s.ledger, e);
     s.ledger = r.ledger;
     xpAwarded += r.awarded;
   }
-  const attempt = { at: now, correct: result.correct, total: result.total, percent: result.percent, xpAwarded, review: result.review };
-  s.attempts[id] = [...attempts, attempt];
+  Object.assign(attempt, { at: now, submitted: true, correct: result.correct, total: result.total, percent: result.percent, xpAwarded, review: result.review });
   save(s);
-  return { ...attempt, attemptNumber: attempts.length + 1, attemptsLeft: Math.max(0, q.maxAttempts - attempts.length - 1), questions: publicQuiz(q).questions };
+  const number = attempts.indexOf(attempt) + 1;
+  return { ...attempt, attemptNumber: number, attemptsLeft: Math.max(0, q.maxAttempts - attempts.length), questions: publicQuiz(q).questions };
 }
 
 export async function listActivities() {
@@ -253,7 +279,7 @@ export async function adminEngagementStats() {
   return {
     students_with_xp: all.filter(p => p.xp > 0).length,
     xp_total: all.reduce((n, p) => n + p.xp, 0),
-    quiz_attempts: Object.values(s.attempts).reduce((n, a) => n + a.length, 0) + 37,
+    quiz_attempts: Object.values(s.attempts).reduce((n, a) => n + a.filter(x => x.submitted).length, 0) + 37,
     activity_participants: ACTIVITIES.reduce((n, a) => n + a.participants, 0),
     top: leaderboard(all, { scope: 'university', limit: 5 }).rows,
   };

@@ -1,5 +1,10 @@
 # Student data integrity — findings, reconciliation and proposed fixes
 
+> **Update 2026-10-10:** the WhatsApp fix is now `supabase/prepared/20261010_01_whatsapp_text_and_sync.sql`
+> (phones as text, copy-on-approval trigger fixing `sync_approved_student()`, guarded backfill,
+> rollback), tested in an isolated database. It supersedes the 20261009 proposals below.
+> Forms intake + review workflow: `20261010_04`. Plan and checklist: `docs/release/RELEASE.md`.
+
 Status: **analysis + proposals. Nothing has been applied to any database.**
 Every write in this package needs explicit approval from the backend owner and
 should run on a staging/branch database first.

@@ -48,3 +48,15 @@ export function eventDateTime(iso) {
   if (!iso) return '';
   return fmt('event', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
 }
+
+/** "just now" · "5 min ago" · "3 h ago" · then dateTime() (localised). */
+export function timeAgo(iso, now = Date.now()) {
+  if (!iso) return '';
+  const ms = now - Date.parse(iso);
+  if (isNaN(ms)) return '';
+  const mins = Math.floor(ms / 6e4);
+  if (mins < 1) return t('time.justNow');
+  if (mins < 60) return t('time.minutesAgo', { count: mins });
+  if (mins < 24 * 60) return t('time.hoursAgo', { count: Math.floor(mins / 60) });
+  return dateTime(iso);
+}

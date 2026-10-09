@@ -104,6 +104,28 @@ export function normalizeMember(raw) {
     section: strOrNull(raw.section),
     roles: normalizeRoles(raw.roles),
     scopes: scopes(raw.scopes),
+    status: strOrNull(raw.account_status ?? raw.status),
+  };
+}
+
+export const APPLICATION_STATUSES = ['pending', 'needs_review', 'approved', 'rejected'];
+
+/** One application row (admin_list_applications). Unknown statuses become 'needs_review'. */
+export function normalizeApplication(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const status = APPLICATION_STATUSES.includes(raw.status) ? raw.status : 'needs_review';
+  return {
+    id: str(raw.id),
+    studentCode: str(raw.student_code),
+    fullName: str(raw.full_name),
+    status,
+    submittedAt: strOrNull(raw.submitted_at),
+    reviewedAt: strOrNull(raw.reviewed_at),
+    source: strOrNull(raw.source),
+    sourceRow: raw.source_row == null ? null : Number(raw.source_row),
+    rosterMatch: raw.roster_match == null ? null : Boolean(raw.roster_match),
+    duplicates: Number(raw.duplicate_count) || 0,
+    note: strOrNull(raw.review_note),
   };
 }
 

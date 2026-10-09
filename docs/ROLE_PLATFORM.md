@@ -9,7 +9,7 @@ decides what is **allowed**.
 | **Student Hub** | everyone with a hub profile | `/dashboard` | Home · Learn · Updates · Progress · Profile |
 | **Content Studio** | `section_editor`, `admin` | `/editor` | Overview · Upload · My content (status filters) |
 | **Review Desk** | `content_manager`, `admin` | `/review` | Review queue · History |
-| **Admin Control Center** | `admin` | `/admin` | Overview · People · Content · Insights · Settings |
+| **Admin Control Center** | `admin` | `/admin` | Overview · Students & Team · Content · Settings |
 
 **Roles are permissions, not identities.** Every account with a hub profile keeps
 the Student Hub; each staff role adds a workspace. An editor who is also a
@@ -27,16 +27,16 @@ reviewer gets Student Hub + Content Studio + Review Desk; an admin gets all four
 | Progress | XP, level, ranks → Quizzes, Activities, Leaderboard |
 | Profile | details, Settings (language, theme), sign out |
 
-**Admin Control Center** — five destinations; related pages are in-page section
-tabs (`SUBNAV`), not extra top-level items:
+**Admin Control Center** — four destinations, no nested tab bars. Records open in
+drawers, permissions in a dialog; "View detailed analytics" (Overview) and the
+audit log / role simulator (Settings) are contextual pages, not tabs:
 
-| Destination | Sections |
+| Destination | Contains |
 |---|---|
-| Overview | platform status (Live / Sample / Not collected), metrics, pending decisions, recent activity |
-| People | Students · Staff & roles (roles, scopes, permission matrix) |
-| Content | Library · Review queue · Quizzes · Activities |
-| Insights | Analytics · Engagement · Review activity · Audit log |
-| Settings | Platform (read-only configuration and feature status) · Role simulator |
+| Overview | 6 KPIs (approved students, online now, active today, pending applications, content to review, published), Action required (links into each workflow), Recent activity, Platform health — "Not collected" where no source exists |
+| Students & Team | one directory: Students · Applications · Staff (switch); details and roles in a drawer; "Manage permissions" dialog |
+| Content | one list for resources, assignments, quizzes, activities, announcements; filters type · status · subject · section · creator; Pending review opens the shared review page |
+| Settings | General · Appearance · Access & security · Advanced (collapsed: role simulator, diagnostics, data integrity) |
 
 Old addresses (`/admin/team`, `/admin/audit`, `/review/processed`, `/editor/drafts`, …)
 redirect to their new homes (`REDIRECTS`), so bookmarks keep working.
@@ -54,6 +54,7 @@ redirect to their new homes (`REDIRECTS`), so bookmarks keep working.
   (`nasu.theme`). `index.html` applies the saved language and theme before first
   paint.
 - Both live in Settings (the gear in every top bar, and Profile → Settings).
+  "System" is not a palette: it resolves to Dark or Light and says which.
 
 Source of truth: `assets/js/services/experiences.js` (pure, tested in
 `tests/experiences.test.mjs`).

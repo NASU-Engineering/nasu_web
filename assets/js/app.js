@@ -10,6 +10,7 @@ import { renderLayout } from './ui/layout.js';
 import { errorState, loadingState } from './ui/components.js';
 import { openSettingsDialog } from './ui/settings.js';
 import { applyTheme } from './ui/theme.js';
+import { startPresence, stopPresence } from './services/presence.js';
 import { t, applyLocale, onLocaleChange } from './i18n/index.js';
 
 import landing from './views/landing.js';
@@ -30,18 +31,15 @@ import editorOverview from './views/console/editor-overview.js';
 import editorUploads from './views/console/editor-uploads.js';
 import editorItem from './views/console/editor-item.js';
 import editorUpload from './views/console/editor-upload.js';
-import { reviewQueue, reviewHistory, adminReviewQueue } from './views/console/review-queue.js';
-import { adminReviewActivity } from './views/console/review-history.js';
+import { reviewQueue, reviewHistory } from './views/console/review-queue.js';
 import reviewItem from './views/console/review-item.js';
 import adminOverview from './views/console/admin-overview.js';
 import adminContent from './views/console/admin-content.js';
-import adminTeam from './views/console/admin-team.js';
-import adminStudents from './views/console/admin-students.js';
+import adminPeople from './views/console/admin-people.js';
 import adminAudit from './views/console/admin-audit.js';
 import adminAnalytics from './views/console/admin-analytics.js';
 import adminSimulator from './views/console/admin-simulator.js';
 import adminSettings from './views/console/admin-settings.js';
-import { adminQuizzes, adminActivities, adminEngagement } from './views/console/admin-engage.js';
 
 // Language and theme before the first render (index.html also sets them early).
 applyLocale();
@@ -93,21 +91,16 @@ const ROUTES = [
   { path: '/review/history', view: reviewHistory, roles: REVIEWER },
   { path: '/review/:id', view: reviewItem, roles: REVIEWER },
 
-  // Admin Control Center — Overview · People · Content · Insights · Settings
+  // Admin Control Center — Overview · Students & Team · Content · Settings
+  // (+ contextual pages: detailed analytics from Overview; audit log and role simulator from Settings)
   { path: '/admin', view: adminOverview, roles: ADMIN },
-  { path: '/admin/people', view: adminStudents, roles: ADMIN },
-  { path: '/admin/people/staff', view: adminTeam, roles: ADMIN },
+  { path: '/admin/people', view: adminPeople, roles: ADMIN },
   { path: '/admin/content', view: adminContent, roles: ADMIN },
-  { path: '/admin/content/review', view: adminReviewQueue, roles: ADMIN },
-  { path: '/admin/content/quizzes', view: adminQuizzes, roles: ADMIN },
-  { path: '/admin/content/activities', view: adminActivities, roles: ADMIN },
   { path: '/admin/content/:id', view: reviewItem, roles: ADMIN },
-  { path: '/admin/insights', view: adminAnalytics, roles: ADMIN },
-  { path: '/admin/insights/engagement', view: adminEngagement, roles: ADMIN },
-  { path: '/admin/insights/reviews', view: adminReviewActivity, roles: ADMIN },
-  { path: '/admin/insights/audit', view: adminAudit, roles: ADMIN },
   { path: '/admin/settings', view: adminSettings, roles: ADMIN },
-  { path: '/admin/settings/simulator', view: adminSimulator, roles: ADMIN },
+  { path: '/admin/analytics', view: adminAnalytics, roles: ADMIN },
+  { path: '/admin/audit', view: adminAudit, roles: ADMIN },
+  { path: '/admin/simulator', view: adminSimulator, roles: ADMIN },
 
   ...Object.entries(REDIRECTS).map(([path, redirect]) => ({ path, redirect })),
 ].map(r => {
@@ -200,6 +193,7 @@ async function router() {
   let access = NO_ACCESS;
   let accessError = null;
   if (session) {
+    startPresence();
     try { access = await api.access.getMine(session); } catch (err) { accessError = err; }
     if (seq !== renderSeq) return;
     if (accessError?.code === 'unauthenticated') {
@@ -323,13 +317,17 @@ let signingOut = false;
 document.addEventListener('click', async e => {
   if (!e.target.closest('[data-action="sign-out"]') || signingOut) return;
   signingOut = true;
+  stopPresence();
   await api.auth.signOut().catch(() => {});
   navigate('/login?signedout=1', { replace: true });
   signingOut = false;
 });
 
 // Session ended outside the sign-out button (expired, revoked, other tab): re-check guards.
-api.auth.onChange(type => { if (type === 'signed_out' && !signingOut) router(); });
+api.auth.onChange(type => {
+  if (type === 'signed_out') stopPresence();
+  if (type === 'signed_out' && !signingOut) router();
+});
 
 // Returning from Microsoft sign-in: finish it before any routing happens, so
 // guards never see a half-finished sign-in.

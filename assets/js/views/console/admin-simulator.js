@@ -63,7 +63,7 @@ export default async function adminSimulator({ access, path, navigate }) {
 
   return {
     title: t('nav.simulator'),
-    html: consoleShell({ access, path, eyebrow: t('experience.admin'), title: t('nav.settings'), lead: t('sim.lead'), body }),
+    html: consoleShell({ access, path, back: { href: '/admin/settings', label: t('nav.settings') }, eyebrow: t('experience.admin'), title: t('nav.simulator'), lead: t('sim.lead'), body }),
     bind(root) {
       root.querySelectorAll('[data-persona]').forEach(btn => btn.addEventListener('click', async () => {
         btn.disabled = true;

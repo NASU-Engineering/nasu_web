@@ -98,4 +98,3 @@ function makeView({ processed, route, itemBase, admin = false }) {
 
 export const reviewQueue = makeView({ processed: false, route: '/review', itemBase: '/review' });
 export const reviewHistory = makeView({ processed: true, route: '/review/history', itemBase: '/review' });
-export const adminReviewQueue = makeView({ processed: false, route: '/admin/content/review', itemBase: '/admin/content', admin: true });

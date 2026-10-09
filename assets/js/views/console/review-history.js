@@ -1,11 +1,8 @@
-// Admin → Insights → Review activity:
-// a timeline of decisions built from processed content items (approved /
-// rejected / published). No extra backend call — see reviewEvents().
+// Review decisions timeline (used by Admin → Detailed analytics), built from
+// processed content items (approved / rejected / published). No extra backend call.
 
 import { html } from '../../ui/html.js';
-import { api } from '../../services/api.js';
 import { subjectById } from '../../data/catalog.js';
-import { consoleShell, statTile, fill, panel } from '../../ui/console.js';
 import { emptyState } from '../../ui/components.js';
 import { statusBadge } from '../../ui/workflow.js';
 import { shortDate, timeOfDay } from '../../ui/format.js';
@@ -26,7 +23,7 @@ export function reviewEvents(items) {
 
 const KIND_STATUS = { approved: 'approved', rejected: 'rejected', published: 'published' };
 
-function timeline(events, hrefFor, level = 2) {
+export function timeline(events, hrefFor, level = 2) {
   if (!events.length) return emptyState(t('insights.noDecisions'), t('insights.noDecisionsText'));
   const days = [];
   for (const e of events) {
@@ -50,38 +47,3 @@ function timeline(events, hrefFor, level = 2) {
     </section>`)}</div>`;
 }
 
-/** Admin → Insights → Review activity: what's waiting + a timeline of the latest decisions. */
-export async function adminReviewActivity({ access, path }) {
-  const hrefFor = it => `#/admin/content/${encodeURIComponent(it.id)}`;
-  return {
-    title: t('nav.reviewActivity'),
-    html: consoleShell({
-      access, path,
-      eyebrow: t('experience.admin'),
-      title: t('nav.insights'),
-      lead: t('insights.reviewsLead'),
-      body: html`
-        <div id="rhStats" class="stat-grid"></div>
-        ${panel(t('insights.latestDecisions'), html`<div id="rhList"></div>`)}`,
-    }),
-    bind(root) {
-      const processed = api.review.listQueue({ status: 'processed' });
-      fill(root.querySelector('#rhList'), {
-        load: () => processed,
-        render: page => timeline(reviewEvents(page.items), hrefFor, 3),
-      });
-      fill(root.querySelector('#rhStats'), {
-        load: async () => ({ pending: await api.review.listQueue({ status: 'pending_review' }), processed: await processed }),
-        render: ({ pending, processed: done }) => {
-          const n = s => done.items.filter(i => i.status === s).length;
-          const hint = t('insights.inLatest', { count: done.items.length });
-          return html`
-            ${statTile({ label: t('insights.waiting'), value: `${pending.items.length}${pending.nextCursor ? '+' : ''}`, icon: 'inbox', href: '#/admin/content/review' })}
-            ${statTile({ label: t('insights.approvedUnpublished'), value: n('approved'), icon: 'check', hint })}
-            ${statTile({ label: t('status.rejected'), value: n('rejected'), icon: 'alert', hint })}
-            ${statTile({ label: t('status.published'), value: n('published'), icon: 'book', hint })}`;
-        },
-      });
-    },
-  };
-}

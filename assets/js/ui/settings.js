@@ -5,7 +5,15 @@
 import { html, mount } from './html.js';
 import { icons } from './icons.js';
 import { LOCALES, getLocale, setLocale, t } from '../i18n/index.js';
-import { THEMES, getThemePreference, setThemePreference } from './theme.js';
+import { THEMES, getThemePreference, setThemePreference, currentTheme } from './theme.js';
+
+// "System — currently Dark": System isn't a palette of its own, so say which one it resolved to.
+const systemLabel = () => t('theme.systemCurrently', { theme: t(`theme.${currentTheme()}`) });
+
+// Keep every visible System label in step with the OS / the user's choice.
+if (typeof document !== 'undefined') {
+  document.addEventListener('nasu:theme', () => document.querySelectorAll('.theme-sys-now').forEach(el => { el.textContent = systemLabel(); }));
+}
 
 /** The settings form. `id` keeps radio names unique when two forms exist. */
 export function displaySettings(id = 'ds') {
@@ -25,11 +33,16 @@ export function displaySettings(id = 'ds') {
       </fieldset>
       <fieldset class="ds-group">
         <legend>${icons.eye}<span>${t('settings.theme')}</span></legend>
-        <div class="ds-options ds-themes">
+        <div class="theme-list">
           ${THEMES.map(th => html`
-            <label class="ds-opt ds-theme">
+            <label class="theme-opt">
               <input type="radio" name="${id}-theme" value="${th}" ${th === theme ? 'checked' : ''}>
-              <span><span class="swatch swatch-${th}" aria-hidden="true"></span>${t(`theme.${th}`)}</span>
+              <span class="theme-prev theme-prev-${th}" aria-hidden="true"><span></span><span></span><span></span></span>
+              <span class="theme-text">
+                <strong>${th === 'system' ? html`<span class="theme-sys-now">${systemLabel()}</span>` : t(`theme.${th}`)}</strong>
+                <span>${t(`theme.${th}Note`)}</span>
+              </span>
+              <span class="theme-check" aria-hidden="true">${icons.check}</span>
             </label>`)}
         </div>
         <p class="ds-help">${t('settings.themeHelp')}</p>

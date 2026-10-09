@@ -5,6 +5,7 @@ import { api } from '../../services/api.js';
 import { consoleShell, workspaceErrorState } from '../../ui/console.js';
 import { chips, emptyState, loadingState } from '../../ui/components.js';
 import { personLabel } from '../../ui/workflow.js';
+import { dateTime } from '../../ui/format.js';
 import { t } from '../../i18n/index.js';
 
 const ACTION_FILTERS = [
@@ -14,8 +15,7 @@ const ACTION_FILTERS = [
   { value: 'scope.', get label() { return t('audit.filter.scopes'); } },
 ];
 
-const timeFmt = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-const when = iso => { const d = new Date(iso); return iso && !isNaN(d) ? timeFmt.format(d) : '—'; };
+const when = iso => dateTime(iso) || '—';
 const tone = action => (/reject|revok|delete|remov/.test(action) ? 'bad' : /approv|publish|grant/.test(action) ? 'ok' : 'neutral');
 
 function metadataView(meta) {
@@ -25,7 +25,7 @@ function metadataView(meta) {
   if (simple && entries.length <= 3) {
     return html`<span class="meta-kv">${entries.map(([k, v]) => html`<span><span class="mono">${k}</span>: ${String(v)}</span>`)}</span>`;
   }
-  return html`<details class="meta-raw"><summary>${entries.length} field${entries.length === 1 ? '' : 's'}</summary><pre class="mono">${JSON.stringify(meta, null, 2)}</pre></details>`;
+  return html`<details class="meta-raw"><summary>${t('audit.fields', { count: entries.length })}</summary><pre class="mono">${JSON.stringify(meta, null, 2)}</pre></details>`;
 }
 
 export function auditRows(entries, { compact = false } = {}) {
@@ -57,8 +57,9 @@ export default async function adminAudit({ access, path }) {
     title: t('nav.auditLog'),
     html: consoleShell({
       access, path,
+      back: { href: '/admin/settings', label: t('nav.settings') },
       eyebrow: t('experience.admin'),
-      title: t('nav.insights'),
+      title: t('nav.auditLog'),
       lead: t('audit.lead'),
       body: html`
         <div class="toolbar">${chips(ACTION_FILTERS, '', { name: t('filter.byAction') })}</div>

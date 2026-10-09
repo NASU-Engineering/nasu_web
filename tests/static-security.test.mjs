@@ -31,7 +31,8 @@ test('only the publishable key is configured', () => {
 });
 
 test('no direct access to private tables', () => {
-  noMatch(/approved_students|university_students|\bapplications\b/, 'private table names must not appear in shipped code');
+  // Applications, presence and engagement are reached only through admin/student RPCs.
+  noMatch(/approved_students|university_students|form_responses|xp_events|quiz_questions|presence_heartbeats|activity_events/, 'private table names must not appear in shipped code');
   noMatch(/\.from\(\s*['"`]/, 'no direct table queries from the browser yet');
 });
 
@@ -63,6 +64,13 @@ const ALLOWED_RPCS = [
   'save_content_draft', 'submit_content_for_review', 'list_review_queue', 'review_content',
   'publish_content', 'get_admin_stats', 'admin_list_content', 'admin_search_members',
   'admin_grant_role', 'admin_revoke_role', 'admin_set_editor_scopes', 'admin_list_audit_log',
+  // admin operations (supabase/prepared/20261010_02 + _04 — prepared, not applied)
+  'record_presence', 'admin_activity_summary', 'admin_recent_activity', 'admin_application_summary',
+  'admin_list_applications', 'admin_review_application', 'admin_data_integrity_summary',
+  // engagement (supabase/prepared/20261010_03 — prepared, not applied)
+  'get_my_progress', 'list_quizzes', 'get_quiz', 'start_quiz_attempt', 'submit_quiz_attempt',
+  'list_activities', 'join_activity', 'leave_activity', 'get_leaderboard',
+  'admin_list_quizzes', 'admin_list_activities', 'admin_engagement_stats',
 ].sort();
 
 test('RPC calls only go through allowlisted names', () => {
@@ -70,14 +78,21 @@ test('RPC calls only go through allowlisted names', () => {
   const sites = shipped.flatMap(f => (f.text.match(/\.rpc\([^)]*\)/g) || []).map(c => `${f.path.split(/[\\/]/).pop()}:${c}`));
   assert.deepEqual(sites.sort(), [
     "supabase-backend.js:.rpc('get_my_profile')",
+    'supabase-engage.js:.rpc(name)',
+    'supabase-engage.js:.rpc(name, args)',
+    'supabase-ops.js:.rpc(name)',
+    'supabase-ops.js:.rpc(name, args)',
     'supabase-workspace.js:.rpc(name)',
     'supabase-workspace.js:.rpc(name, args)',
   ]);
-  const ws = shipped.find(f => f.path.endsWith('supabase-workspace.js')).text;
-  const block = ws.match(/export const RPC = \{([\s\S]*?)\};/)[1];
-  const names = [...block.matchAll(/:\s*'([a-z_]+)'/g)].map(m => m[1]);
+  const names = [];
+  for (const [file, map] of [['supabase-workspace.js', 'RPC'], ['supabase-ops.js', 'OPS_RPC'], ['supabase-engage.js', 'ENGAGE_RPC']]) {
+    const text = shipped.find(f => f.path.endsWith(file)).text;
+    const block = text.match(new RegExp(`export const ${map} = \\{([\\s\\S]*?)\\};`))[1];
+    names.push(...[...block.matchAll(/:\s*'([a-z_]+)'/g)].map(m => m[1]));
+    assert.doesNotMatch(text, /\.rpc\(\s*['"`]/, `${file}: RPCs are called only via the RPC map`);
+  }
   assert.deepEqual(['get_my_profile', ...names].sort(), ALLOWED_RPCS);
-  assert.doesNotMatch(ws, /\.rpc\(\s*['"`]/, 'workspace RPCs are called only via the RPC map');
 });
 
 test('shipped config uses the real backend, not the dev mock', () => {

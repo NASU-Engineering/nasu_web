@@ -101,7 +101,7 @@ function resultView(quiz, r) {
     </section>`;
 }
 
-export async function quizView({ params, reload }) {
+export async function quizView({ params }) {
   const quiz = await orNotLive(() => api.engage.quiz(params.id));
   const backLink = { href: '#/quizzes', label: t('nav.quizzes') };
   if (quiz.__notLive) return notLivePage(t('nav.quizzes'), t('nav.quizzes'), backLink);
@@ -129,13 +129,25 @@ export async function quizView({ params, reload }) {
       </div>`,
     bind(root) {
       const body = root.querySelector('#quizBody');
-      root.querySelector('#startQuiz')?.addEventListener('click', () => startAttempt(body, quiz, reload));
+      const start = root.querySelector('#startQuiz');
+      start?.addEventListener('click', async () => {
+        start.disabled = true;
+        try {
+          // The server starts the attempt: it counts from now and its timer is authoritative.
+          const attempt = await api.engage.startQuiz(quiz.id);
+          startAttempt(body, { ...quiz, questions: attempt.questions, timeLimitMin: attempt.timeLimitMin ?? quiz.timeLimitMin }, attempt);
+        } catch (err) {
+          start.disabled = false;
+          toast(err.message, { tone: 'bad' });
+        }
+      });
     },
   };
 }
 
-function startAttempt(body, quiz, reload) {
-  let left = quiz.timeLimitMin * 60;
+function startAttempt(body, quiz, attempt) {
+  const deadline = Date.parse(attempt.startedAt) + quiz.timeLimitMin * 60e3;
+  let left = Math.max(0, Math.round((deadline - Date.now()) / 1000));
   mount(body, html`
     <form class="attempt" id="attemptForm" novalidate>
       <div class="attempt-bar">
@@ -169,7 +181,7 @@ function startAttempt(body, quiz, reload) {
     const btn = body.querySelector('#submitAttempt');
     if (btn) { btn.disabled = true; btn.textContent = t('common.working'); }
     try {
-      const result = await api.engage.submitQuiz(quiz.id, answers());
+      const result = await api.engage.submitQuiz(attempt.attemptId, answers());
       toast(result.xpAwarded ? t('quiz.toastXp', { xp: result.xpAwarded }) : t('quiz.toastDone'));
       mount(body, html`${resultView(quiz, result)}<p><a class="btn btn-ghost" href="#/quizzes">${t('quiz.backToQuizzes')}</a></p>`);
       body.querySelector('.result')?.scrollIntoView({ block: 'start' });
@@ -180,12 +192,13 @@ function startAttempt(body, quiz, reload) {
     }
   };
 
+  let warned = left <= 60;
   const tick = setInterval(() => {
-    left -= 1;
+    left = Math.round((deadline - Date.now()) / 1000);
     const el = body.querySelector('#timer');
     if (!el) { clearInterval(tick); return; }
     el.textContent = fmtClock(Math.max(0, left));
-    if (left === 60) toast(t('quiz.oneMinute'), { tone: 'bad' });
+    if (left <= 60 && !warned) { warned = true; toast(t('quiz.oneMinute'), { tone: 'bad' }); }
     if (left <= 0) submit(); // time is up: submit what's answered
   }, 1000);
 

@@ -90,7 +90,7 @@ test('index.html applies saved language/direction and theme before first paint',
 });
 
 test('theme preference resolves to an applied theme', () => {
-  assert.deepEqual(THEMES, ['system', 'dark', 'light', 'contrast', 'warm']);
+  assert.deepEqual(THEMES, ['system', 'dark', 'light', 'warm', 'contrast']);
   assert.equal(resolveTheme('system', true), 'dark');
   assert.equal(resolveTheme('system', false), 'light');
   assert.equal(resolveTheme('contrast', false), 'contrast');
@@ -104,4 +104,50 @@ test('every applied theme defines the core tokens in the stylesheet', () => {
     const block = css.match(new RegExp(`:root\\[data-theme="${th}"\\]\\s*\\{([^}]*)\\}`))?.[1] || '';
     for (const token of ['--bg', '--ink', '--ink-dim', '--accent-text', '--link']) assert.match(block, new RegExp(`${token}\\s*:`), `${th} ${token}`);
   }
+});
+
+/* ---------- WCAG contrast of the real tokens in every theme ---------- */
+
+function themeTokens(css) {
+  const block = re => Object.fromEntries([...(css.match(re)?.[1] || '').matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map(m => [m[1], m[2].trim()]));
+  const base = block(/:root,\s*:root\[data-theme="dark"\]\s*\{([^}]*)\}/);
+  const out = { dark: base };
+  for (const th of ['light', 'warm', 'contrast']) out[th] = { ...base, ...block(new RegExp(`:root\\[data-theme="${th}"\\]\\s*\\{([^}]*)\\}`)) };
+  return out;
+}
+const lum = hex => {
+  const n = hex.replace('#', '');
+  const full = n.length === 3 ? n.split('').map(c => c + c).join('') : n;
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(full.slice(i, i + 2), 16) / 255).map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+export const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+
+test('every theme meets WCAG AA (high contrast: AAA) for text and UI tokens', () => {
+  const css = readFileSync(new URL('../assets/css/styles.css', import.meta.url), 'utf8');
+  const themes = themeTokens(css);
+  const pairs = [
+    ['--ink', '--bg', 4.5, 7], ['--ink-dim', '--bg', 4.5, 7], ['--accent-text', '--bg', 4.5, 7], ['--link', '--bg', 4.5, 7],
+    ['--ok-text', '--bg', 4.5, 7], ['--bad-text', '--bg', 4.5, 7], ['--on-accent', '--amber', 4.5, 7],
+    ['--blue-deep', '--paper', 4.5, 7], ['--paper-dim', '--paper', 4.5, 7],
+  ];
+  const failures = [];
+  for (const [name, tk] of Object.entries(themes)) {
+    for (const [fg, bg, aa, aaa] of pairs) {
+      const min = name === 'contrast' ? aaa : aa;
+      const ratio = contrast(tk[fg], tk[bg]);
+      if (ratio < min) failures.push(`${name}: ${fg} on ${bg} = ${ratio.toFixed(2)} (needs ${min})`);
+    }
+    // borders / focus are non-text UI: 3:1 against the page
+    if (name === 'contrast' && contrast(tk['--blue-line'], tk['--bg']) < 3) failures.push('contrast: borders under 3:1');
+  }
+  assert.deepEqual(failures, []);
+});
+
+test('dark and system differ only by resolution, light/warm/contrast are distinct palettes', () => {
+  const css = readFileSync(new URL('../assets/css/styles.css', import.meta.url), 'utf8');
+  const th = themeTokens(css);
+  const bgs = ['dark', 'light', 'warm', 'contrast'].map(n => th[n]['--bg']);
+  assert.equal(new Set(bgs).size, 4, 'four distinct page colours');
+  assert.doesNotMatch(css.match(/:root\[data-theme="contrast"\]\s*\{([^}]*)\}/)[1], /#ffd400/i, 'no aggressive yellow in high contrast');
 });

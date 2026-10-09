@@ -191,3 +191,4 @@ export * from './mock-workspace.js';
 /* ---------- engagement (mock) ---------- */
 
 export * from './mock-engage.js';
+export * from './mock-ops.js';

@@ -92,6 +92,31 @@ export function confirmDialog({ title, body = '', confirmLabel = t('common.confi
   });
 }
 
+
+/** Read-only dialog (e.g. the permissions overview). Resolves when closed. */
+export function infoDialog({ title, body, wide = false }) {
+  return new Promise(resolve => {
+    const dlg = document.createElement('dialog');
+    dlg.className = `dlg${wide ? ' dlg-wide' : ''}`;
+    dlg.setAttribute('aria-labelledby', 'infoTitle');
+    mount(dlg, html`
+      <div class="dlg-card">
+        <div class="dlg-head">
+          <h2 class="dlg-title" id="infoTitle">${title}</h2>
+          <button type="button" class="icon-btn icon-btn-sm" data-close aria-label="${t('common.close')}">${icons.close}</button>
+        </div>
+        <div class="dlg-body">${body}</div>
+      </div>`);
+    const opener = document.activeElement;
+    const close = () => { if (dlg.open) dlg.close(); dlg.remove(); opener?.focus?.({ preventScroll: true }); resolve(); };
+    dlg.addEventListener('click', e => { if (e.target === dlg || e.target.closest('[data-close]')) close(); });
+    dlg.addEventListener('cancel', e => { e.preventDefault(); close(); });
+    document.body.append(dlg);
+    dlg.showModal();
+    dlg.querySelector('[data-close]').focus();
+  });
+}
+
 let toastTimer;
 /** Short, polite status message ("Submitted for review"). */
 export function toast(message, { tone = 'ok' } = {}) {

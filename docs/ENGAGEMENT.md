@@ -1,10 +1,14 @@
 # Engagement — Quizzes, Activities, XP, Levels, Leaderboards
 
-**Status: proposal. Nothing here exists in the production database.** The preview
-runs on mock data (`services/mock-engage.js`); the production adapter
-(`services/supabase-engage.js`) answers `backend_required` for every call and the
-UI shows "not live yet". Applying this schema needs backend-owner approval, a
-reviewed migration and the usual dry run / rollback plan.
+**Status: migration prepared and tested in an isolated database — NOT applied.**
+The schema below is implemented in `supabase/prepared/20261010_03_engagement.sql`
+(security tests: `supabase/tests/engagement.test.mjs`; frontend contract:
+`supabase/tests/contract.test.mjs`). Improvements over this proposal: attempts
+start on the server (`start_quiz_attempt`) and count immediately; participants are
+a snapshot of the caller's own profile (short name, group, section), so leaderboards
+never read other students' profiles; awards are serialised per user. Production keeps
+`CONFIG.features.engagement = false` until the migration is approved and applied
+(`docs/release/RELEASE.md` §2). The preview runs on mock data.
 
 The rules are already implemented as pure, tested functions the server version
 must match:
